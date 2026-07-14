@@ -26,9 +26,11 @@ export interface AIAnswer {
 export interface SearchResponse {
   results: SearchResultItem[];
   answer: AIAnswer | null;
+  rewritten_query: string;
 }
 
 export type SearchStreamEvent =
+  | { type: "query"; original_query: string; rewritten_query: string }
   | { type: "results"; results: SearchResultItem[] }
   | { type: "meta"; sources: string[]; confidence: number }
   | { type: "token"; text: string }

@@ -14,4 +14,6 @@ export interface ChatTurn {
   errorMessage?: string | null;
   /** Retrieved chunks backing this answer, kept for citation lookups (file id by filename). */
   results?: SearchResultItem[];
+  /** The query actually embedded for retrieval, after Groq's query-rewrite step. */
+  rewrittenQuery?: string;
 }
