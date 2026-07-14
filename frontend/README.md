@@ -109,16 +109,20 @@ npm run dev
 - **Continue anyway** — scan proceeds and sensitive files are indexed too
 - **Cancel** — no scan is performed
 
-### Search
-`SearchPage` posts a free-text query and renders ranked chunk matches with their source file. Toggling **AI Answer** switches to a live-streamed, ChatGPT-like answer experience:
+### Chat
+`ChatPage` (`src/pages/ChatPage.tsx`) is a full conversational interface over `POST /search/stream`, built from components under `src/features/chat/`:
 
-- `useStreamingAnswer` (`src/hooks/useStreamingAnswer.ts`) opens a `fetch` request to `POST /search/stream`, parses the `text/event-stream` body with `parseSseStream` (`src/lib/sse.ts`), and exposes a single state object (`status`, streamed `results`, accumulated `text`, `sources`, `confidence`, `errorMessage`).
-- `AIAnswerPanel` (`src/features/search/AIAnswerPanel.tsx`) renders that state: a typing indicator before the first token, tokens appended live as they arrive, a blinking cursor while streaming, **Sources** badges and a **Confidence** percentage once available, and a distinct error message if generation fails (separate from the model's own "I couldn't find enough information" response, which is normal answer text, not an error).
-- **Cancel** aborts the in-flight request (`AbortController`) — the panel shows "Generation cancelled." and offers **Retry**.
-- **Retry** re-runs the last query; available after the answer completes, errors, or is cancelled.
-- **Copy** copies the answer text to the clipboard (available as soon as there's any text, even mid-stream), with a brief "Copied" confirmation.
+- **`useChat`** (`src/hooks/useChat.ts`) — the core hook. Holds the conversation as an array of `ChatTurn`s (`src/types/chat.ts`), sends each new message with a trimmed `history` of prior turns (last 20 messages, assistant turns only once `status: "done"`), and streams the response into the corresponding assistant turn via `parseSseStream` (`src/lib/sse.ts`). Exposes `sendMessage`, `retryTurn`, `cancel`, and `clear`.
+- **`ChatMessageBubble`** — renders one turn: user messages as plain-text bubbles; assistant messages via `MarkdownContent`, with a typing indicator before the first token and a blinking cursor while streaming. Per-message **Retry** (regenerates that answer using the conversation up to that point) and **Copy** actions, a **Confidence** percentage, and — once the backend's query-rewrite step reports one — a small "Searched for: ..." caption showing the query that was actually embedded for retrieval (see backend README's "Query rewriting" section).
+- **`MarkdownContent`** (`src/components/common/MarkdownContent.tsx`) — renders full Markdown/GFM (tables, lists, etc.) via `react-markdown` + `remark-gfm`, styled with `@tailwindcss/typography`. Fenced code blocks get a language label and their own **Copy** button; links open in a new tab.
+- **`SourceCitations`** — renders each answer's cited filenames as badges; clicking one that resolves to a known file opens the existing `FileDetailDialog` (matched from the retrieved chunks' `file_id`, not from the model's output).
+- **`SuggestedQuestions`** — shown when the conversation is empty, offering a few starter prompts.
+- **`ChatInput`** — auto-resizing textarea; Enter sends, Shift+Enter inserts a newline; swaps to a Stop button while a response is streaming.
+- Auto-scroll: the message list scrolls to the bottom as new content arrives, unless the user has manually scrolled up more than ~80px from the bottom — scrolling back down re-enables it.
+- **Cancel** aborts the in-flight request; the turn is marked "Generation cancelled." and can be retried.
 
-When AI Answer is off, `SearchPage` falls back to the plain, non-streaming `POST /search/` call as before — no LLM overhead unless the user opts in.
+### Dark mode
+`useTheme` (`src/hooks/useTheme.ts`) toggles Tailwind's class-based dark mode (`darkMode: ["class"]`) on `document.documentElement`, persisted to `localStorage` and defaulting to the OS preference on first visit. `ThemeToggle` (`src/components/layout/ThemeToggle.tsx`) sits in the app header.
 
 ### Files
 `FilesPage` lists indexed files (optionally filtered by folder) and opens `FileDetailDialog` for a single file's metadata/status.

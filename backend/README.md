@@ -12,7 +12,7 @@ See the [root README](../README.md) for the overall project overview and the [SR
 - **ChromaDB** — persistent vector store for embeddings
 - **sentence-transformers** — embedding generation (`all-MiniLM-L6-v2` by default)
 - **PyMuPDF / python-docx / Pillow + pytesseract / Markdown** — per-file-type text extraction
-- **Groq Cloud** (via `httpx`) — optional LLM backend for AI-generated, grounded search answers (streamed via SSE)
+- **Groq Cloud** (via `httpx`) — optional LLM backend for query rewriting (pre-retrieval) and AI-generated, grounded search answers (streamed via SSE)
 
 ## Project Structure
 
@@ -134,10 +134,10 @@ Base prefix: `/api/v1`
 | POST | `/folders/{folder_id}/scan` | Scan a folder for changes, then index pending files. Accepts `?skip_sensitive=true\|false` (default `true`) |
 | GET | `/files/` | List indexed files, optionally filtered with `?folder_id=` |
 | GET | `/files/{file_id}` | Get a single indexed file record |
-| POST | `/search/` | Reverse file search — embeds a text query and returns the most similar indexed chunks. Set `generate_answer: true` in the body to also get a non-streamed AI answer (JSON mode) |
-| POST | `/search/stream` | Same retrieval, but streams the AI answer as Server-Sent Events (see below). Powers the frontend's chat interface |
+| POST | `/search/` | Reverse file search — rewrites the query via Groq, embeds it, and returns the most similar indexed chunks plus the `rewritten_query` used. Set `generate_answer: true` in the body to also get a non-streamed AI answer (JSON mode) |
+| POST | `/search/stream` | Same retrieval (incl. query rewriting), but streams the AI answer as Server-Sent Events (see below). Powers the frontend's chat interface |
 
-Both endpoints accept an optional `history: [{role: "user"|"assistant", content: string}, ...]` in the request body for multi-turn conversations — see "AI-generated search answers" below.
+Both endpoints accept an optional `history: [{role: "user"|"assistant", content: string}, ...]` in the request body for multi-turn conversations, and an optional `rewrite_query: bool` (default `true`) — see "Query rewriting" and "AI-generated search answers" below.
 
 ### Folder scan errors
 
@@ -156,6 +156,22 @@ Registering or estimating a folder validates the path and maps failures to descr
 
 Before indexing, both the estimate and scan endpoints detect files that look like credentials or private keys (`.env*`, `.pem`, `.key`, `.pfx`, `.kdbx`, `wallet.dat`, `id_rsa`/`id_rsa.pub`, `credentials.json`, `passwords.txt`). By default (`skip_sensitive=true`) these are never read, chunked, or embedded — they're excluded from the count of files that get indexed, and any previously-indexed sensitive file is removed on the next scan. Callers may opt in to indexing them anyway via `skip_sensitive=false`. See `app/services/sensitive_file_detector.py`.
 
+### Query rewriting (Groq)
+
+Before embedding, the user's raw query is rewritten via Groq to improve retrieval accuracy — short, acronym-heavy, or ambiguous queries tend to match poorly against chunk text as-is. For example:
+
+| Original query | Rewritten query |
+|---|---|
+| `GST` | `GST invoices issued during financial year` |
+
+The pipeline is: **user query → Groq rewrites query → embedding → vector search → (optional) answer**. The rewrite is instructed to preserve the original intent — expanding abbreviations and adding likely context terms, never introducing new topics or assumptions the query doesn't support.
+
+This is a pure pre-processing step over retrieval, implemented in `app/services/query_rewrite_service.py` (`QueryRewriteService`) and orchestrated by `SearchService.rewrite_query()`:
+- If `GROQ_API_KEY` is unset, or the rewrite call fails for any reason, retrieval falls back to the **original query unchanged** — a broken or unconfigured rewrite step never blocks search.
+- Callers can opt out per-request with `rewrite_query: false` in the body (default `true`).
+- The **answer generation** step (see below) still receives the user's original query text for its own "Query: ..." framing — only retrieval embeds the rewritten version. Rewriting is retrieval-only, not conversation-facing.
+- The query actually used for retrieval is always returned to the caller: as `rewritten_query` in the `POST /search/` response, and as a `query` SSE event (`{"type": "query", "original_query": ..., "rewritten_query": ...}`) sent first over `POST /search/stream`, before the `results` event.
+
 ### AI-generated search answers (Groq)
 
 Both `/search/` and `/search/stream` can synthesize a grounded, natural-language answer on top of the retrieved chunks, using Groq Cloud as the LLM backend. This is a pure post-processing step over retrieval — if `GROQ_API_KEY` is unset or Groq is unreachable, search results are returned normally with no answer.
@@ -172,7 +188,8 @@ Both `/search/` and `/search/stream` can synthesize a grounded, natural-language
 ```json
 {
   "results": [ { "file_id": 1, "filename": "budget.txt", "chunk_text": "...", "score": 0.87 } ],
-  "answer": { "text": "...", "sources": ["budget.txt"], "confidence": 0.91 }
+  "answer": { "text": "...", "sources": ["budget.txt"], "confidence": 0.91 },
+  "rewritten_query": "GST invoices issued during financial year"
 }
 ```
 
@@ -182,7 +199,8 @@ Here `confidence` is self-reported by the model (constrained to `[0, 1]` and val
 
 | Event | Payload | When |
 |---|---|---|
-| `results` | `{"type": "results", "results": [SearchResultItem, ...]}` | Immediately, once retrieval completes |
+| `query` | `{"type": "query", "original_query": "...", "rewritten_query": "..."}` | First — before retrieval's results are available |
+| `results` | `{"type": "results", "results": [SearchResultItem, ...]}` | Once retrieval (using the rewritten query) completes |
 | `meta` | `{"type": "meta", "sources": [...], "confidence": number}` | Before the first token — confidence here is derived deterministically from retrieval similarity scores (not self-reported by the model), since there's no LLM output yet to judge sufficiency from |
 | `token` | `{"type": "token", "text": "..."}` | Once per generated token/delta, in order |
 | `done` | `{"type": "done"}` | On successful completion |
@@ -190,7 +208,7 @@ Here `confidence` is self-reported by the model (constrained to `[0, 1]` and val
 
 If retrieval finds nothing, `meta` is sent with empty sources/zero confidence and a single `token` event carries the exact `"I couldn't find enough information."` message — the LLM is never called in that case. Cancelling the client-side request (aborting the fetch) closes the connection; the server-side generator is torn down via `GeneratorExit`, which closes the underlying Groq HTTP stream (see `GroqClient.chat_stream` in `app/services/groq_client.py`).
 
-**Architecture:** `app/services/groq_client.py` (thin Groq HTTP transport, JSON-mode and streaming) → `app/services/answer_service.py` (non-streaming orchestration) / `app/services/answer_stream_service.py` (streaming orchestration) → `app/services/search_stream_service.py` (composes retrieval + streaming answer for the `/search/stream` endpoint). Shared grounding logic (context building, the insufficient-context message, similarity-based confidence) lives in `app/services/rag_context.py` so the two answer paths can't drift apart.
+**Architecture:** `app/services/groq_client.py` (thin Groq HTTP transport, JSON-mode and streaming) → `app/services/query_rewrite_service.py` (pre-retrieval query rewriting) + `app/services/answer_service.py` (non-streaming answer orchestration) / `app/services/answer_stream_service.py` (streaming answer orchestration) → `app/services/search_stream_service.py` (composes query rewriting + retrieval + streaming answer for the `/search/stream` endpoint). Shared grounding logic (context building, the insufficient-context message, similarity-based confidence, history trimming) lives in `app/services/rag_context.py` so the answer paths can't drift apart.
 
 ## Data Model (current)
 
@@ -212,6 +230,7 @@ Embeddings themselves live in a Chroma persistent collection (`storage/chroma`),
 | `sensitive_file_detector` | Flags credential/key-like files so they can be excluded from indexing |
 | `folder_access_guard` / `folder_path_guard` | Filesystem-level validation (existence, permissions, network/lock errors, overly-broad paths) |
 | `GroqClient` | Thin transport wrapper around Groq Cloud's chat completions API (JSON mode and streaming) |
+| `QueryRewriteService` | Rewrites the user's query via Groq before it's embedded, to improve retrieval on short/ambiguous queries; falls back to the original query if disabled or unavailable |
 | `AnswerService` | Non-streaming grounded answer synthesis (JSON mode) for `POST /search/` |
 | `AnswerStreamService` | Streaming grounded answer synthesis (SSE) — the core of `POST /search/stream` |
 | `SearchStreamService` | Composes `SearchService.retrieve()` with `AnswerStreamService` into one SSE response |

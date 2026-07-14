@@ -13,6 +13,7 @@ class SearchQuery(BaseModel):
     top_k: int = 10
     generate_answer: bool = False
     history: list[ChatMessage] = []
+    rewrite_query: bool = True
 
 
 class SearchResultItem(BaseModel):
@@ -31,3 +32,4 @@ class AIAnswer(BaseModel):
 class SearchResponse(BaseModel):
     results: list[SearchResultItem]
     answer: AIAnswer | None = None
+    rewritten_query: str

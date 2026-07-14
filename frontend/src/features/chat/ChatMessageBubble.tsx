@@ -80,6 +80,10 @@ export function ChatMessageBubble({ turn, onRetry, onSelectFile }: ChatMessageBu
           ) : null}
         </div>
 
+        {turn.role === "assistant" && turn.rewrittenQuery ? (
+          <p className="px-1 text-xs italic text-muted-foreground">Searched for: “{turn.rewrittenQuery}”</p>
+        ) : null}
+
         {turn.role === "assistant" && turn.sources && turn.sources.length > 0 ? (
           <SourceCitations sources={turn.sources} results={turn.results} onSelectFile={onSelectFile} />
         ) : null}

@@ -74,6 +74,12 @@ export function useChat() {
 
         for await (const event of parseSseStream<SearchStreamEvent>(response)) {
           switch (event.type) {
+
+
+
+            case "query":
+              updateTurn(assistantId, { rewrittenQuery: event.rewritten_query });
+              break;
             case "results":
               updateTurn(assistantId, { results: event.results });
               break;
@@ -154,6 +160,7 @@ export function useChat() {
                 errorMessage: null,
                 sources: undefined,
                 confidence: undefined,
+                rewrittenQuery: undefined,
               }
             : turn
         )

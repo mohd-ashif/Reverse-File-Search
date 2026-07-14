@@ -1,9 +1,11 @@
 # User Guide — Recent Features
 
-This guide covers two recent additions to Reverse File Search:
+
+This guide covers recent additions to Reverse File Search:
 
 1. **Sensitive file protection** during folder scans
-2. **AI Answer** — Groq-powered natural-language answers on the Search page
+2. **Chat** — a full conversational interface, grounded in your indexed files
+3. **Smarter search** — your queries are automatically improved before searching
 
 For general setup, see [`INSTALLATION.md`](INSTALLATION.md). For full requirements, see [`SRS.md`](SRS.md).
 
@@ -37,35 +39,38 @@ If no sensitive files are found, scanning proceeds immediately with no dialog.
 
 ---
 
-## 2. AI Answer (powered by Groq) — live, streamed
+## 2. Chat
 
-The **Search** page can generate a plain-language answer on top of your search results, instead of just returning raw matching chunks. The answer now streams in live, word by word, like a chat assistant.
+The **Chat** page (in the nav where "Search" used to be) is a full conversation with an AI grounded in your indexed files — like chatting with an assistant that has only read your files and nothing else.
 
-### How to use it
+### Starting a conversation
 
-1. Go to the **Search** page.
-2. Click the **AI Answer** button (top right of the search bar) to turn it on — it highlights when active.
-3. Type your query as usual. As soon as you stop typing, the answer card appears and begins generating.
+Open **Chat**. With an empty conversation, you'll see a few **suggested questions** you can click instead of typing — handy for getting a feel for what to ask. Otherwise, just type a question and press **Enter** (Shift+Enter for a new line without sending) or tap the send button.
 
 ### What you'll see, in order
 
-1. **Thinking…** — a small animated typing indicator appears first, while the request is being set up and before the first word of the answer arrives.
-2. **The answer typing itself out** — text appears progressively as the AI generates it, with a blinking cursor at the end while it's still going, exactly like a chat assistant response.
-3. **Sources** — badges showing which of your files the answer is based on. These are taken directly from the files search actually retrieved, never invented by the AI, so citations are always real files in your index. They typically appear before the answer text finishes.
-4. **Confidence** — a percentage next to "AI Answer" indicating how well your indexed content supports the answer.
+1. **Thinking…** — a small animated typing indicator while the request is being set up, before the first word arrives.
+2. **The answer typing itself out** — text appears progressively with a blinking cursor while it's still generating, formatted as proper **Markdown**: headings, lists, tables, and **code blocks** all render properly. Each code block has its own **Copy** button and shows its language if one was specified.
+3. **A "Searched for: ..." note**, if your query was rephrased for a better search match — see §3 below.
+4. **Sources** — clickable badges naming the files the answer is based on. Clicking one that matches an indexed file opens that file's detail view. These come directly from the files actually retrieved, never invented by the AI.
+5. **Confidence** — a percentage under the answer, indicating how well your indexed content supports it.
 
-### Controls while and after generating
+### Conversation history
+
+Chat remembers your conversation — you can ask a follow-up like "what about the other one?" and it will understand what you mean from the earlier turns. This history is **not saved anywhere** — it lives only in your browser tab for the current session; reloading the page starts a fresh conversation.
+
+### Controls on each message
 
 | Button | When it appears | What it does |
 |---|---|---|
-| **Cancel** | While the answer is being generated | Immediately stops generation. The card shows "Generation cancelled." |
-| **Retry** | After the answer finishes, is cancelled, or errors | Re-runs the same query from scratch |
-| **Copy** | As soon as any answer text exists (even mid-generation) | Copies the answer text to your clipboard; the button briefly shows "Copied" |
+| **Stop** (input bar) | While a response is being generated | Immediately stops generation for that message. It's marked "Generation cancelled." |
+| **Retry** | After a message finishes, is cancelled, or errors | Regenerates just that answer, using the conversation up to that point |
+| **Copy** | As soon as any answer text exists (even mid-generation) | Copies that message's answer text to your clipboard |
 
 ### Grounding rules (why answers are trustworthy)
 
-- The AI is only shown the text of your top retrieved chunks (up to `top_k`, default 10) — it has no access to anything outside your indexed files and no general knowledge is used.
-- If your indexed files don't contain enough information to answer the question, the streamed answer will be exactly:
+- The AI is only shown the text of your top retrieved chunks — it has no access to anything outside your indexed files and no general knowledge is used.
+- If your indexed files don't contain enough information to answer, the response will be exactly:
 
   > "I couldn't find enough information."
 
@@ -73,10 +78,25 @@ The **Search** page can generate a plain-language answer on top of your search r
 
 ### If something goes wrong
 
-- **No API key configured / AI temporarily unreachable:** the card shows a distinct error message (not the "couldn't find enough information" text) with a **Retry** button. Your regular search results are unaffected either way.
-- **Connection drops mid-answer:** the card shows an error with whatever partial answer had already streamed in, plus **Retry**.
-- **Nothing matched your query:** the results list is empty and the answer will say it couldn't find enough information, since there's nothing to answer from.
+- **No API key configured / AI temporarily unreachable:** that message shows a distinct error (not the "couldn't find enough information" text) with a **Retry** option.
+- **Connection drops mid-answer:** the message shows an error alongside whatever partial answer had already streamed in, plus **Retry**.
 
-### Regular search still works the same way
+### Light / dark mode
 
-When **AI Answer** is off, the list of matching file chunks behaves exactly as before — filename, similarity score, and the matching excerpt — with no AI call and no added latency.
+Use the sun/moon button in the top-right of the header to switch themes. Your choice is remembered for next time; on your very first visit it follows your operating system's theme.
+
+---
+
+## 3. Smarter search (automatic query rewriting)
+
+Before searching your files, your query is automatically improved to get better matches — especially useful for short queries, acronyms, or abbreviations that wouldn't match file content well on their own.
+
+**Example:**
+
+| You type | The app actually searches for |
+|---|---|
+| `GST` | `GST invoices issued during financial year` |
+
+When this happens, you'll see a small note under the answer: *"Searched for: “...”"* — so you always know what was actually matched against your files, even though you get to keep typing short and natural.
+
+This step never blocks your search: if it's unavailable for any reason, your original query is used as-is, exactly like before. It also never changes what the AI's final answer is about — it only affects which files get found, not how the answer is worded.

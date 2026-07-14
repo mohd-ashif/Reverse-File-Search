@@ -25,6 +25,11 @@ class SearchStreamService:
         self.answer_stream_service = answer_stream_service or AnswerStreamService()
 
     def stream(self, query: SearchQuery) -> Iterator[str]:
-        results = self.search_service.retrieve(query.query, query.top_k)
+        rewritten_query = self.search_service.rewrite_query(query)
+        yield sse_event(
+            {"type": "query", "original_query": query.query, "rewritten_query": rewritten_query}
+        )
+
+        results = self.search_service.retrieve(rewritten_query, query.top_k)
         yield sse_event({"type": "results", "results": [item.model_dump() for item in results]})
         yield from self.answer_stream_service.stream(query.query, results, query.history)

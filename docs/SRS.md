@@ -2,7 +2,7 @@
 
 ## Reverse File Search
 
-**Version:** 1.1
+**Version:** 1.2
 **Status:** Living document — reflects the current implemented feature set plus planned scope
 **Date:** 2026-07-14
 
@@ -25,8 +25,9 @@ The system:
 - Extracts text from supported file types (PDF, DOCX, TXT, Markdown, Excel, and images via OCR).
 - Chunks and embeds extracted text using a sentence-embedding model, storing vectors in a persistent Chroma vector store.
 - Detects and, by default, excludes potentially sensitive files (credentials, private keys, `.env` files, etc.) from indexing, with an explicit user override.
-- Answers natural-language search queries by embedding the query and retrieving the most semantically similar indexed chunks, returning their source files.
-- Presents all of the above through a web UI (folder management, indexed file browsing, search).
+- Answers natural-language queries by first rewriting the query for better retrieval (via an LLM), embedding the rewritten query, and retrieving the most semantically similar indexed chunks.
+- Optionally synthesizes a grounded, cited natural-language answer from those chunks (via an LLM), across multi-turn conversations.
+- Presents all of the above through a web UI: folder management, indexed file browsing, and a chat interface for conversing with an AI grounded in the indexed content.
 
 Out of scope for the current version (see §1.5 Assumptions/Constraints and §8 Future Work):
 
@@ -52,6 +53,8 @@ Out of scope for the current version (see §1.5 Assumptions/Constraints and §8 
 | **Embedding** | A numeric vector representation of text, produced by a sentence-embedding model, used for similarity search |
 | **Vector store** | Chroma — a persistent store of embeddings, queried for nearest neighbors to a query embedding |
 | **Sensitive file** | A file whose name/extension strongly suggests it holds secrets (e.g. `.env`, `.pem`, `id_rsa`, `credentials.json`) |
+| **Query rewriting** | An LLM pre-processing step that expands/clarifies the user's raw query (e.g. resolving acronyms) into a form better suited to embedding-based retrieval, before the vector search runs |
+| **Conversation / turn** | A single exchange in the chat interface — a user message or the assistant's response to it; a conversation is an ordered sequence of turns |
 | **SRS** | Software Requirements Specification (this document) |
 
 ### 1.5 Assumptions and Constraints
@@ -93,7 +96,7 @@ Reverse File Search is a self-contained two-tier web application:
 3. Detect potentially sensitive files before indexing and let the user choose whether to skip or include them.
 4. Extract text from supported file types and index it (chunk + embed).
 5. List and inspect indexed files and their status.
-6. Perform a natural-language search and view ranked results with source file context.
+6. Chat with an AI grounded in indexed file content, across multiple turns, with the underlying query rewritten before each retrieval for better recall.
 7. Remove a monitored folder (and its indexed data).
 
 ### 2.3 User Classes and Characteristics
@@ -172,11 +175,31 @@ Each requirement is numbered `FR-<area>-<n>` and marked with an implementation s
 | ID | Requirement | Status |
 |---|---|---|
 | FR-SRCH-1 | The system shall accept a free-text natural-language query and an optional result limit (`top_k`, default 10). | Implemented |
-| FR-SRCH-2 | The system shall embed the query using the same embedding model used for indexing and perform a similarity search against the vector store. | Implemented |
+| FR-SRCH-2 | The system shall embed the query (after query rewriting, see §3.4a) using the same embedding model used for indexing, and perform a similarity search against the vector store. | Implemented |
 | FR-SRCH-3 | The system shall return ranked results, each including the source file's ID and filename, the matching chunk's text, and a similarity score. | Implemented |
-| FR-SRCH-4 | The frontend shall provide a search page where a user enters a query and views the ranked results. | Implemented |
+| FR-SRCH-4 | The frontend shall provide a chat interface where a user enters a query and views the ranked results and any generated answer (see §3.4c). | Implemented |
 
-### 3.4a AI-Generated Answers
+### 3.4a Query Rewriting
+
+| ID | Requirement | Status |
+|---|---|---|
+| FR-QR-1 | Before embedding, the system shall optionally rewrite the user's raw query via an LLM (Groq) to improve retrieval accuracy — e.g. expanding acronyms or adding likely context terms (example: "GST" → "GST invoices issued during financial year"). | Implemented |
+| FR-QR-2 | The rewrite step shall be instructed to preserve the original query's intent and shall not introduce new topics, assumptions, or specifics not supported by the original query. | Implemented |
+| FR-QR-3 | The system shall support disabling query rewriting per-request (`rewrite_query: false`); when disabled, or when no LLM provider is configured, or when the rewrite call fails for any reason, retrieval shall fall back to embedding the original, unmodified query — a failed or disabled rewrite shall never block search. | Implemented |
+| FR-QR-4 | The system shall return the query text actually used for retrieval (the rewritten query, or the original if unchanged) to the caller: as `rewritten_query` in the non-streaming response, and as a dedicated `query` event sent before retrieval results in the streaming response. | Implemented |
+| FR-QR-5 | The answer-generation step shall reference the user's original query text, not the rewritten form, when framing its response — rewriting affects retrieval only, not the language of the answer. | Implemented |
+
+### 3.4b Conversation History
+
+| ID | Requirement | Status |
+|---|---|---|
+| FR-CHAT-1 | The system shall support multi-turn conversations: a request may include prior turns as `history: [{role, content}, ...]`, appended to the messages sent to the answer-generating LLM so it can resolve conversational follow-ups. | Implemented |
+| FR-CHAT-2 | Conversation history shall not affect retrieval — each turn's vector search shall embed only that turn's (rewritten) query, never prior conversation content. | Implemented |
+| FR-CHAT-3 | The system shall cap the number of history messages included in the LLM prompt (12 server-side, regardless of what the client sends) to bound prompt size and cost. | Implemented |
+| FR-CHAT-4 | The frontend shall maintain the full conversation as an ordered list of turns, sending only the most recent messages (last 20) as history, and excluding any assistant turn that is in progress, errored, or was cancelled from that history. | Implemented |
+| FR-CHAT-5 | The frontend shall allow retrying an individual assistant turn, regenerating it using the conversation history up to (but not including) that turn. | Implemented |
+
+### 3.4c AI-Generated Answers
 
 | ID | Requirement | Status |
 |---|---|---|
@@ -187,12 +210,24 @@ Each requirement is numbered `FR-<area>-<n>` and marked with an implementation s
 | FR-AI-5 | If the retrieved context does not support an answer, the system shall return the exact message "I couldn't find enough information." instead of an invented answer, in both the non-streaming and streaming modes. | Implemented |
 | FR-AI-6 | The non-streaming mode shall return a confidence score self-reported by the model (constrained to [0, 1]) alongside an explicit sufficiency flag used to decide whether to return the model's answer or the insufficient-context fallback. | Implemented |
 | FR-AI-7 | If no AI provider is configured, or the provider is unreachable, normal search results shall still be returned; only the AI answer shall be omitted (non-streaming) or reported via a distinct error event (streaming). | Implemented |
-| FR-AI-8 | The streaming endpoint shall emit, over a single connection: the retrieved results, then source/confidence metadata (derived from retrieval similarity, since no model output exists yet to self-report from), then the answer text as a sequence of token events, then a completion or error event. | Implemented |
+| FR-AI-8 | The streaming endpoint shall emit, over a single connection, in order: the query actually used for retrieval (original vs. rewritten, per §3.4a), the retrieved results, source/confidence metadata (derived from retrieval similarity, since no model output exists yet to self-report from), the answer text as a sequence of token events, then a completion or error event. | Implemented |
 | FR-AI-9 | The frontend shall render streamed answer tokens live as they arrive, with a typing indicator shown before the first token. | Implemented |
 | FR-AI-10 | The frontend shall allow the user to cancel an in-progress AI answer generation; the in-flight request shall be aborted and the underlying server-side connection to the LLM provider shall be closed. | Implemented |
 | FR-AI-11 | The frontend shall allow the user to retry generation after completion, cancellation, or an error, re-running the same query. | Implemented |
 | FR-AI-12 | The frontend shall allow the user to copy the generated answer text to the clipboard at any point once any text has been generated. | Implemented |
-| FR-AI-13 | The frontend shall provide an explicit toggle to enable AI-generated answers; when disabled, search shall behave exactly as it did before this feature (no LLM call, no added latency). | Implemented |
+
+### 3.4d Chat Interface
+
+| ID | Requirement | Status |
+|---|---|---|
+| FR-CHATUI-1 | The frontend shall present a single conversational chat interface (not a per-query toggle) as the primary way to search and get answers; every message is sent through the streaming endpoint. | Implemented |
+| FR-CHATUI-2 | Assistant responses shall be rendered as Markdown, including GitHub-Flavored Markdown elements (tables, lists, etc.). | Implemented |
+| FR-CHATUI-3 | Fenced code blocks within an assistant response shall be visually distinguished (monospace, bordered, labeled with the fence's declared language when present) and shall offer their own copy-to-clipboard control independent of the whole-message copy action. | Implemented |
+| FR-CHATUI-4 | Cited source filenames shall be rendered as clickable elements; selecting one that corresponds to a retrieved file shall open that file's detail view. | Implemented |
+| FR-CHATUI-5 | When a conversation is empty, the frontend shall present a set of suggested starter questions the user can select instead of typing. | Implemented |
+| FR-CHATUI-6 | The message list shall automatically scroll to show new content as it streams in, unless the user has manually scrolled away from the bottom, in which case automatic scrolling shall pause until the user returns to the bottom. | Implemented |
+| FR-CHATUI-7 | The frontend shall provide a light/dark theme toggle, persisted across sessions, defaulting to the operating system's preference on first visit. | Implemented |
+| FR-CHATUI-8 | The chat layout shall be usable on both desktop and narrow (mobile-width) viewports. | Implemented |
 
 ### 3.5 Indexed File Browsing
 
@@ -233,8 +268,8 @@ Base prefix: `/api/v1`. All request/response bodies are JSON.
 | POST | `/folders/{folder_id}/scan` | query `?skip_sensitive=bool` (default `true`) | `{scan: ScanResult, index: IndexResult}` | Scan + index a folder |
 | GET | `/files/` | query `?folder_id=int` (optional) | `IndexedFileRead[]` | List indexed files |
 | GET | `/files/{file_id}` | — | `IndexedFileRead` | Get one indexed file (404 if missing) |
-| POST | `/search/` | `{query, top_k?, generate_answer?}` | `{results: SearchResultItem[], answer: AIAnswer \| null}` | Semantic search, optionally with a non-streamed AI answer |
-| POST | `/search/stream` | `{query, top_k?}` | `text/event-stream` — see §4.1.1 | Semantic search with a streamed AI answer |
+| POST | `/search/` | `{query, top_k?, generate_answer?, history?, rewrite_query?}` | `{results: SearchResultItem[], answer: AIAnswer \| null, rewritten_query: string}` | Semantic search (with query rewriting), optionally with a non-streamed AI answer |
+| POST | `/search/stream` | `{query, top_k?, history?, rewrite_query?}` | `text/event-stream` — see §4.1.1 | Semantic search (with query rewriting) with a streamed AI answer; powers the chat interface |
 
 Folder-path validation errors are mapped to HTTP status codes: 400 (invalid/too broad), 403 (permission denied), 404 (missing), 409 (already monitored), 423 (locked), 503 (network unreachable).
 
@@ -244,7 +279,8 @@ The response body is a sequence of SSE frames (`data: <json>\n\n`), emitted in t
 
 | Event `type` | Payload | Notes |
 |---|---|---|
-| `results` | `{results: SearchResultItem[]}` | Sent first, once retrieval completes |
+| `query` | `{original_query: string, rewritten_query: string}` | Sent first, before retrieval results — `rewritten_query` equals `original_query` if rewriting was disabled, unavailable, or unchanged |
+| `results` | `{results: SearchResultItem[]}` | Sent once retrieval (using the rewritten query) completes |
 | `meta` | `{sources: string[], confidence: number}` | Sent before any answer tokens; confidence is derived from retrieval similarity scores, not self-reported by the model |
 | `token` | `{text: string}` | Zero or more, in order; concatenation yields the full answer |
 | `done` | `{}` | Terminates a successful stream |
@@ -256,7 +292,7 @@ The response body is a sequence of SSE frames (`data: <json>\n\n`), emitted in t
 |---|---|
 | `/` | Landing/overview |
 | `/folders` | Register, preview, scan, and remove monitored folders; sensitive-file warning dialogs |
-| `/search` | Enter a query, view ranked search results; optional streamed AI answer with typing indicator, cancel, retry, and copy |
+| `/search` | Chat interface: multi-turn conversation grounded in indexed files, with Markdown rendering, code blocks, clickable citations, suggested questions, streamed responses with a typing indicator, per-message cancel/retry/copy, and a light/dark theme toggle (route path retained as `/search`; the nav label is "Chat") |
 | `/files` | Browse indexed files and inspect detail |
 
 ### 4.3 Configuration Interfaces
@@ -314,6 +350,7 @@ Both tiers are configured via `.env` files (see `backend/.env.example`, `fronten
 - Removing a monitored folder cascades to delete all of its `indexed_files` and `file_chunks` rows and their Chroma embeddings.
 - A scan that finds a file deleted from disk removes its record and embeddings the same way.
 - Sensitive files are never persisted into the vector store under the default (skip) behavior; if a file is later reclassified as sensitive, existing embeddings for it are removed.
+- Conversation history is not persisted server-side: each request carries its own `history`, held only in the frontend's in-memory chat state. Refreshing or closing the chat page discards the conversation; nothing conversational is written to the database.
 
 ---
 
@@ -327,6 +364,7 @@ Both tiers are configured via `.env` files (see `backend/.env.example`, `fronten
 - **NFR-SEC-4:** (Planned) Once authentication is implemented, all folder/file/search endpoints shall require a valid session/token.
 - **NFR-SEC-5:** The AI answer feature shall send only the text of chunks already retrieved for the current query to the configured LLM provider (Groq Cloud) — no other indexed content, file paths, or system metadata shall be transmitted. This is inherent to the current implementation (`AnswerService`/`AnswerStreamService` only ever receive the retrieved `SearchResultItem` list), not a separate filter.
 - **NFR-SEC-6:** The LLM provider API key (`GROQ_API_KEY`) shall be supplied via environment configuration only, consistent with NFR-SEC-3, and never logged or echoed back in API responses.
+- **NFR-SEC-7:** The query-rewriting step shall send only the user's raw query text to the LLM provider — no indexed file content, file paths, or system metadata are part of that request (it happens before retrieval, so no file content exists yet to send).
 
 ### 6.2 Performance
 
@@ -361,10 +399,12 @@ Both tiers are configured via `.env` files (see `backend/.env.example`, `fronten
 Frontend (React/Vite)
   ├─ features/folders   → add/estimate/scan/remove folders, sensitive-file warnings
   ├─ features/files     → browse indexed files
-  ├─ features/search    → AIAnswerPanel — streamed answer UI (typing indicator, cancel, retry, copy)
+  ├─ features/chat      → message bubbles, input, suggested questions, source citations
   ├─ features/onboarding→ first-run guidance
-  ├─ hooks/useStreamingAnswer → drives the /search/stream SSE connection
-  └─ pages/router       → Home, Folders, Search, Files
+  ├─ hooks/useChat            → multi-turn conversation state + drives the /search/stream SSE connection
+  ├─ hooks/useTheme           → light/dark theme toggle, persisted
+  ├─ components/common/MarkdownContent → Markdown/GFM rendering + code block copy
+  └─ pages/router       → Home, Folders, Chat, Files
 
 Backend (FastAPI)
   ├─ api/v1/endpoints    → health, folders, files, search (HTTP layer only)
@@ -372,14 +412,15 @@ Backend (FastAPI)
   │   ├─ FolderService            → registration, validation, estimate
   │   ├─ FileScannerService        → disk <-> DB reconciliation
   │   ├─ IndexingPipeline           → extraction, chunking, embedding
-  │   ├─ SearchService               → query embedding + vector search (retrieval)
-  │   ├─ GroqClient                   → Groq Cloud HTTP transport (JSON mode + streaming)
-  │   ├─ AnswerService                 → non-streaming grounded answer synthesis
-  │   ├─ AnswerStreamService            → streaming grounded answer synthesis (SSE)
-  │   ├─ SearchStreamService             → composes retrieval + streamed answer
-  │   ├─ rag_context                      → shared grounding logic (context, confidence, fallback message)
-  │   ├─ sensitive_file_detector           → credential/key file detection
-  │   └─ folder_access_guard/path_guard     → filesystem validation
+  │   ├─ SearchService               → query rewriting + query embedding + vector search (retrieval)
+  │   ├─ QueryRewriteService          → Groq-backed pre-retrieval query rewriting
+  │   ├─ GroqClient                    → Groq Cloud HTTP transport (JSON mode + streaming)
+  │   ├─ AnswerService                  → non-streaming grounded answer synthesis
+  │   ├─ AnswerStreamService             → streaming grounded answer synthesis (SSE)
+  │   ├─ SearchStreamService              → composes query rewriting + retrieval + streamed answer
+  │   ├─ rag_context                       → shared grounding logic (context, confidence, history, fallback message)
+  │   ├─ sensitive_file_detector            → credential/key file detection
+  │   └─ folder_access_guard/path_guard      → filesystem validation
   ├─ repositories         → SQLAlchemy data access
   ├─ models                → monitored_folders, indexed_files, file_chunks
   └─ Chroma vector store    → persisted embeddings keyed by chroma_id
@@ -395,7 +436,9 @@ Backend (FastAPI)
 - Evaluate direct file upload as an alternative ingestion path alongside folder monitoring.
 - Add background/async scanning for very large folders instead of a synchronous scan request.
 - Reconcile the two AI-answer confidence models (model-self-reported for non-streaming vs. retrieval-similarity-derived for streaming) into a single consistent measure, or clearly document the difference to end users.
-- Support additional/alternate LLM providers behind the same `AnswerService`/`AnswerStreamService` interfaces, since the current design is Groq-specific in `GroqClient` only.
+- Support additional/alternate LLM providers behind the same `AnswerService`/`AnswerStreamService`/`QueryRewriteService` interfaces, since the current design is Groq-specific in `GroqClient` only.
+- Evaluate whether query rewriting measurably improves retrieval quality in practice (vs. adding latency and an extra LLM call per query) and consider caching rewrites for repeated/similar queries.
+- Consider condensing older conversation turns (summarization) instead of a hard cutoff at 12/20 messages, so very long conversations don't lose earlier context abruptly.
 
 ---
 
@@ -405,3 +448,4 @@ Backend (FastAPI)
 |---|---|---|
 | 1.0 | 2026-07-14 | Initial SRS covering folder management, scanning/indexing, sensitive-file detection, search, and file browsing as currently implemented. |
 | 1.1 | 2026-07-14 | Added AI-generated search answers (Groq): non-streaming JSON-mode answers and streamed (SSE) answers with live token rendering, cancel, retry, and copy in the UI. See §3.4a, §4.1.1, NFR-SEC-5/6. |
+| 1.2 | 2026-07-14 | Replaced the single-query search page with a full multi-turn chat interface (Markdown rendering, code blocks, clickable citations, suggested questions, auto-scroll, dark mode); added conversation history support end-to-end; added Groq-backed query rewriting before retrieval. See §3.4a–d, §4.1, §4.1.1, §4.2, NFR-SEC-7. |
