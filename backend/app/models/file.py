@@ -39,3 +39,9 @@ class IndexedFile(TimestampMixin, Base):
 
     folder: Mapped["MonitoredFolder"] = relationship(back_populates="files")
     chunks: Mapped[list["FileChunk"]] = relationship(back_populates="file", cascade="all, delete-orphan")
+    summary: Mapped["FileSummary | None"] = relationship(
+        back_populates="file", cascade="all, delete-orphan", uselist=False
+    )
+    entities: Mapped["DocumentEntities | None"] = relationship(
+        back_populates="file", cascade="all, delete-orphan", uselist=False
+    )

@@ -6,6 +6,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { FileSummarySection } from "@/features/files/FileSummarySection";
 import { FILE_STATUS_LABEL, FILE_STATUS_VARIANT, formatBytes, formatDate } from "@/lib/status";
 import type { IndexedFile } from "@/types/file";
 
@@ -26,7 +27,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 export function FileDetailDialog({ file, onOpenChange }: FileDetailDialogProps) {
   return (
     <Dialog open={file !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
         {file ? (
           <>
             <DialogHeader>
@@ -49,6 +50,8 @@ export function FileDetailDialog({ file, onOpenChange }: FileDetailDialogProps) 
                 />
               ) : null}
             </dl>
+
+            <FileSummarySection fileId={file.id} />
           </>
         ) : null}
       </DialogContent>
