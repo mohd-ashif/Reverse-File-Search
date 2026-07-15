@@ -20,7 +20,14 @@ class ChromaVectorStore:
             import chromadb
 
             self._client = chromadb.PersistentClient(path=self._persist_dir)
-            self._collection = self._client.get_or_create_collection(self._collection_name)
+            # Explicit cosine space: embeddings aren't normalized, and Chroma's
+            # default (L2/squared-euclidean) distance is unbounded for them, which
+            # makes the `1 - distance` similarity score used for confidence go
+            # deeply negative on irrelevant chunks. Cosine distance stays in a
+            # sane, bounded range regardless of vector norm.
+            self._collection = self._client.get_or_create_collection(
+                self._collection_name, metadata={"hnsw:space": "cosine"}
+            )
         return self._collection
 
     def upsert(
