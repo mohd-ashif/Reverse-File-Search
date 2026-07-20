@@ -45,3 +45,4 @@ class IndexedFile(TimestampMixin, Base):
     entities: Mapped["DocumentEntities | None"] = relationship(
         back_populates="file", cascade="all, delete-orphan", uselist=False
     )
+    tags: Mapped[list["FileTag"]] = relationship(back_populates="file", cascade="all, delete-orphan")

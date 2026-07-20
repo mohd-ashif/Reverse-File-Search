@@ -1,10 +1,15 @@
+import mimetypes
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.schemas.entities import DocumentEntitiesRead
 from app.schemas.file import IndexedFileRead
 from app.schemas.summary import FileSummaryRead
+from app.schemas.tag import FileTagsRead
 from app.services.file_service import FileService
 from app.services.file_summary_service import FileSummaryService, IndexedFileNotFoundError
 from app.services.summary_service import SummaryExtractionError, SummaryNotConfiguredError, SummaryProviderError
@@ -13,8 +18,16 @@ router = APIRouter()
 
 
 @router.get("/", response_model=list[IndexedFileRead])
-def list_files(folder_id: int | None = None, db: Session = Depends(get_db)) -> list[IndexedFileRead]:
-    return FileService(db).list_files(folder_id)
+def list_files(folder_id: int | None = None, tag: str | None = None, db: Session = Depends(get_db)) -> list[IndexedFileRead]:
+    return FileService(db).list_files(folder_id, tag)
+
+
+@router.get("/tags", response_model=list[FileTagsRead])
+def list_file_tags(folder_id: int | None = None, db: Session = Depends(get_db)) -> list[FileTagsRead]:
+    """Tags for every file that has at least one, scoped to a folder if given.
+    Registered before /{file_id} so the literal "tags" path isn't swallowed
+    by that route."""
+    return FileService(db).list_file_tags(folder_id)
 
 
 @router.get("/{file_id}", response_model=IndexedFileRead)
@@ -23,6 +36,28 @@ def get_file(file_id: int, db: Session = Depends(get_db)) -> IndexedFileRead:
     if file_record is None:
         raise HTTPException(status_code=404, detail=f"File {file_id} not found")
     return file_record
+
+
+@router.get("/{file_id}/content")
+def get_file_content(file_id: int, db: Session = Depends(get_db)) -> FileResponse:
+    file_record = FileService(db).get_file(file_id)
+    if file_record is None:
+        raise HTTPException(status_code=404, detail=f"File {file_id} not found")
+
+    path = Path(file_record.absolute_path)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="File is no longer available on disk")
+
+    media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    return FileResponse(path, media_type=media_type, filename=file_record.filename, content_disposition_type="inline")
+
+
+@router.get("/{file_id}/tags", response_model=FileTagsRead)
+def get_file_tags(file_id: int, db: Session = Depends(get_db)) -> FileTagsRead:
+    tags = FileService(db).get_tags(file_id)
+    if tags is None:
+        raise HTTPException(status_code=404, detail=f"File {file_id} not found")
+    return tags
 
 
 @router.get("/{file_id}/entities", response_model=DocumentEntitiesRead)

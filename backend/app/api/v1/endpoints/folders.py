@@ -1,7 +1,12 @@
+import asyncio
+import logging
+import threading
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.db.session import get_db
+from app.db.session import SessionLocal, get_db
 from app.schemas.folder import FolderCreate, FolderRead
 from app.schemas.scan import FolderEstimate, IndexResult, ScanResult
 from app.services.folder_access_guard import (
@@ -19,7 +24,10 @@ from app.services.folder_service import (
     InvalidFolderPathError,
 )
 from app.services.indexing_pipeline import IndexingPipeline
+from app.services.scan_progress import ScanProgressTracker
 from app.services.scanner_service import FileScannerService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -100,3 +108,41 @@ def scan_folder(
     scan_result = FileScannerService(db).scan_folder(folder, skip_sensitive=skip_sensitive)
     index_result = IndexingPipeline(db).process_pending(folder_id=folder_id)
     return {"scan": scan_result, "index": index_result}
+
+
+@router.post("/{folder_id}/scan/start")
+async def start_folder_scan(
+    folder_id: int, skip_sensitive: bool = True, db: Session = Depends(get_db)
+) -> dict[str, str]:
+    """Kicks off a scan + index run in the background and returns a scan_id.
+
+    Connect to `/api/v1/ws/scan/{scan_id}` immediately after to receive live
+    stage-by-stage progress; the run finishes with a `summary` (or `error`)
+    event over that same socket.
+    """
+    try:
+        FolderService(db).get_folder(folder_id)
+    except FolderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    scan_id = uuid.uuid4().hex
+    loop = asyncio.get_running_loop()
+
+    def run() -> None:
+        session = SessionLocal()
+        tracker = ScanProgressTracker(scan_id=scan_id, folder_id=folder_id, loop=loop)
+        try:
+            folder = FolderService(session).get_folder(folder_id)
+            scan_result = FileScannerService(session).scan_folder(
+                folder, skip_sensitive=skip_sensitive, progress=tracker
+            )
+            index_result = IndexingPipeline(session).process_pending(folder_id=folder_id, progress=tracker)
+            tracker.summary(scan_result, index_result)
+        except Exception as exc:  # noqa: BLE001 - must reach the client as an error event, not crash a thread silently
+            logger.exception("Background scan %s for folder %s failed", scan_id, folder_id)
+            tracker.error(str(exc))
+        finally:
+            session.close()
+
+    threading.Thread(target=run, name=f"scan-{scan_id}", daemon=True).start()
+    return {"scan_id": scan_id}

@@ -46,8 +46,13 @@ class ChromaVectorStore:
             return
         self.collection.delete(ids=ids)
 
-    def query(self, query_embedding: list[float], top_k: int = 10) -> dict:
-        return self.collection.query(query_embeddings=[query_embedding], n_results=top_k)
+    def query(self, query_embedding: list[float], top_k: int = 10, where: dict | None = None) -> dict:
+        return self.collection.query(query_embeddings=[query_embedding], n_results=top_k, where=where)
+
+    def get_by_ids(self, ids: list[str]) -> dict:
+        if not ids:
+            return {"ids": [], "documents": []}
+        return self.collection.get(ids=ids)
 
 
 @lru_cache

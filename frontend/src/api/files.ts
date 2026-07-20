@@ -1,17 +1,34 @@
-import { apiClient, ApiError } from "@/api/client";
+import { API_BASE_URL, apiClient, ApiError } from "@/api/client";
 import type { IndexedFile } from "@/types/file";
 import type { FileSummary } from "@/types/summary";
+import type { FileTags } from "@/types/tag";
 
-export async function listFiles(folderId?: number): Promise<IndexedFile[]> {
+export async function listFiles(folderId?: number, tag?: string): Promise<IndexedFile[]> {
   const { data } = await apiClient.get<IndexedFile[]>("/files/", {
+    params: { folder_id: folderId, tag },
+  });
+  return data;
+}
+
+export async function listFileTags(folderId?: number): Promise<FileTags[]> {
+  const { data } = await apiClient.get<FileTags[]>("/files/tags", {
     params: folderId ? { folder_id: folderId } : undefined,
   });
+  return data;
+}
+
+export async function getFileTags(fileId: number): Promise<FileTags> {
+  const { data } = await apiClient.get<FileTags>(`/files/${fileId}/tags`);
   return data;
 }
 
 export async function getFile(fileId: number): Promise<IndexedFile> {
   const { data } = await apiClient.get<IndexedFile>(`/files/${fileId}`);
   return data;
+}
+
+export function getFileContentUrl(fileId: number): string {
+  return `${API_BASE_URL}/files/${fileId}/content`;
 }
 
 export async function getFileSummary(fileId: number): Promise<FileSummary | null> {

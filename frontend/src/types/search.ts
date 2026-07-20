@@ -8,6 +8,8 @@ export interface SearchQuery {
   top_k?: number;
   generate_answer?: boolean;
   history?: ChatMessage[];
+  folder_id?: number;
+  file_id?: number;
 }
 
 export interface SearchResultItem {

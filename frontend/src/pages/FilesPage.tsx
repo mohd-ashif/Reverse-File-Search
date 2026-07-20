@@ -17,8 +17,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FileDetailDialog } from "@/features/files/FileDetailDialog";
+import { TagBadge } from "@/features/files/TagBadge";
 import { useDebounce } from "@/hooks/useDebounce";
-import { useFiles } from "@/hooks/useFiles";
+import { useAllFileTags, useFiles } from "@/hooks/useFiles";
 import { useFolders } from "@/hooks/useFolders";
 import { FILE_STATUS_LABEL, FILE_STATUS_VARIANT, formatBytes, formatDate } from "@/lib/status";
 import type { IndexedFile } from "@/types/file";
@@ -56,6 +57,7 @@ function SortButton({
 
 export function FilesPage() {
   const [folderId, setFolderId] = useState<string>("all");
+  const [tag, setTag] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -65,7 +67,23 @@ export function FilesPage() {
   const debouncedSearch = useDebounce(search, 300);
   const { data: folders } = useFolders();
   const parsedFolderId = folderId === "all" ? undefined : Number(folderId);
-  const { data: files, isLoading, isError, error, refetch } = useFiles(parsedFolderId);
+  const parsedTag = tag === "all" ? undefined : tag;
+  const { data: files, isLoading, isError, error, refetch } = useFiles(parsedFolderId, parsedTag);
+  const { data: fileTags } = useAllFileTags(parsedFolderId);
+  const tagsByFileId = useMemo(() => {
+    const map = new Map<number, string[]>();
+    for (const entry of fileTags ?? []) {
+      map.set(entry.file_id, entry.tags);
+    }
+    return map;
+  }, [fileTags]);
+  const availableTags = useMemo(() => {
+    const tags = new Set<string>();
+    for (const entry of fileTags ?? []) {
+      for (const t of entry.tags) tags.add(t);
+    }
+    return Array.from(tags).sort((a, b) => a.localeCompare(b));
+  }, [fileTags]);
 
   const filteredAndSorted = useMemo(() => {
     const filtered = (files ?? []).filter((file) =>
@@ -139,6 +157,25 @@ export function FilesPage() {
                 ))}
               </SelectContent>
             </Select>
+            <Select
+              value={tag}
+              onValueChange={(value) => {
+                setTag(value);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-48" aria-label="Filter by tag">
+                <SelectValue placeholder="All tags" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All tags</SelectItem>
+                {availableTags.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardHeader>
         <CardContent>
@@ -175,6 +212,7 @@ export function FilesPage() {
                     <TableHead>
                       <SortButton label="Status" sortKey="status" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
                     </TableHead>
+                    <TableHead>Tags</TableHead>
                     <TableHead>
                       <SortButton label="Indexed" sortKey="created_at" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
                     </TableHead>
@@ -198,6 +236,13 @@ export function FilesPage() {
                       <TableCell>{formatBytes(file.size_bytes)}</TableCell>
                       <TableCell>
                         <Badge variant={FILE_STATUS_VARIANT[file.status]}>{FILE_STATUS_LABEL[file.status]}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex max-w-xs flex-wrap gap-1">
+                          {(tagsByFileId.get(file.id) ?? []).map((t) => (
+                            <TagBadge key={t} tag={t} />
+                          ))}
+                        </div>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{formatDate(file.created_at)}</TableCell>
                     </TableRow>

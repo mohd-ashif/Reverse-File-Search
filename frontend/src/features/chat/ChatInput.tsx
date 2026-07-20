@@ -3,6 +3,8 @@ import { Square, ArrowUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { SearchSuggestionsDropdown } from "@/features/chat/SearchSuggestionsDropdown";
+import { useSearchSuggestions } from "@/hooks/useSearchSuggestions";
 
 const MAX_TEXTAREA_HEIGHT_PX = 200;
 
@@ -14,7 +16,10 @@ interface ChatInputProps {
 
 export function ChatInput({ isStreaming, onSend, onStop }: ChatInputProps) {
   const [value, setValue] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const { data: suggestions, isLoading: suggestionsLoading } = useSearchSuggestions(value, showSuggestions);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -23,25 +28,37 @@ export function ChatInput({ isStreaming, onSend, onStop }: ChatInputProps) {
     el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT_PX)}px`;
   }, [value]);
 
-  const handleSend = () => {
-    if (!value.trim() || isStreaming) return;
-    onSend(value);
+  const handleSend = (text: string = value) => {
+    if (!text.trim() || isStreaming) return;
+    onSend(text);
     setValue("");
+    setShowSuggestions(false);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       handleSend();
+    } else if (event.key === "Escape") {
+      setShowSuggestions(false);
     }
   };
 
   return (
-    <div className="flex items-end gap-2 rounded-xl border bg-card p-2 shadow-sm">
+    <div className="relative flex items-end gap-2 rounded-xl border bg-card p-2 shadow-sm">
+      {showSuggestions ? (
+        <SearchSuggestionsDropdown
+          suggestions={suggestions}
+          isLoading={suggestionsLoading}
+          onSelect={handleSend}
+        />
+      ) : null}
       <Textarea
         ref={textareaRef}
         value={value}
         onChange={(event) => setValue(event.target.value)}
+        onFocus={() => setShowSuggestions(true)}
+        onBlur={() => setShowSuggestions(false)}
         onKeyDown={handleKeyDown}
         placeholder="Ask about your indexed files..."
         rows={1}
@@ -56,7 +73,7 @@ export function ChatInput({ isStreaming, onSend, onStop }: ChatInputProps) {
         <Button
           type="button"
           size="icon"
-          onClick={handleSend}
+          onClick={() => handleSend()}
           disabled={!value.trim()}
           aria-label="Send message"
         >

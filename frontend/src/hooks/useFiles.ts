@@ -1,11 +1,26 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { generateFileSummary, getFile, getFileSummary, listFiles } from "@/api/files";
+import { generateFileSummary, getFile, getFileSummary, getFileTags, listFileTags, listFiles } from "@/api/files";
 
-export function useFiles(folderId?: number) {
+export function useFiles(folderId?: number, tag?: string) {
   return useQuery({
-    queryKey: ["files", folderId ?? "all"],
-    queryFn: () => listFiles(folderId),
+    queryKey: ["files", folderId ?? "all", tag ?? "all"],
+    queryFn: () => listFiles(folderId, tag),
+  });
+}
+
+export function useFileTags(fileId: number | null) {
+  return useQuery({
+    queryKey: ["files", "tags", fileId],
+    queryFn: () => getFileTags(fileId as number),
+    enabled: fileId !== null,
+  });
+}
+
+export function useAllFileTags(folderId?: number) {
+  return useQuery({
+    queryKey: ["files", "tags", "all", folderId ?? "all"],
+    queryFn: () => listFileTags(folderId),
   });
 }
 

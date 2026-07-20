@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
@@ -10,9 +11,13 @@ from app.repositories.chunk_repository import ChunkRepository
 from app.repositories.file_repository import FileRepository
 from app.schemas.scan import FolderEstimate, ScanResult
 from app.services.file_type_detector import detect_file_type, is_supported
+from app.services.scan_progress import ScanStage
 from app.services.sensitive_file_detector import is_sensitive_file
 from app.services.vector_store import get_vector_store
 from app.utils.file_utils import compute_checksum
+
+if TYPE_CHECKING:
+    from app.services.scan_progress import ScanProgressTracker
 
 MAX_SENSITIVE_SAMPLES = 10
 
@@ -107,7 +112,12 @@ class FileScannerService:
         self.chunk_repo = ChunkRepository(db)
         self.vector_store = get_vector_store()
 
-    def scan_folder(self, folder: MonitoredFolder, skip_sensitive: bool = True) -> ScanResult:
+    def scan_folder(
+        self,
+        folder: MonitoredFolder,
+        skip_sensitive: bool = True,
+        progress: "ScanProgressTracker | None" = None,
+    ) -> ScanResult:
         result = ScanResult(folder_id=folder.id)
         seen_paths: set[str] = set()
 
@@ -121,6 +131,8 @@ class FileScannerService:
 
             for filename in filenames:
                 file_path = root_path / filename
+                if progress:
+                    progress.stage(ScanStage.FINDING_FILES, filename)
 
                 if skip_sensitive and is_sensitive_file(file_path):
                     # Not added to seen_paths, so a previously-indexed sensitive
@@ -135,6 +147,9 @@ class FileScannerService:
                     stat = file_path.stat()
                 except OSError:
                     continue
+
+                if progress:
+                    progress.stage(ScanStage.READING_METADATA, filename)
 
                 absolute_path = str(file_path.resolve())
                 seen_paths.add(absolute_path)

@@ -136,6 +136,7 @@ Base prefix: `/api/v1`
 | GET | `/files/{file_id}` | Get a single indexed file record |
 | POST | `/search/` | Reverse file search — rewrites the query via Groq, embeds it, and returns the most similar indexed chunks plus the `rewritten_query` used. Set `generate_answer: true` in the body to also get a non-streamed AI answer (JSON mode) |
 | POST | `/search/stream` | Same retrieval (incl. query rewriting), but streams the AI answer as Server-Sent Events (see below). Powers the frontend's chat interface |
+| GET | `/search/suggestions` | Search box autocomplete — `?q=` (optional partial text) returns `{recent, popular, ai_generated}` string lists |
 
 Both endpoints accept an optional `history: [{role: "user"|"assistant", content: string}, ...]` in the request body for multi-turn conversations, and an optional `rewrite_query: bool` (default `true`) — see "Query rewriting" and "AI-generated search answers" below.
 

@@ -14,6 +14,11 @@ class SearchQuery(BaseModel):
     generate_answer: bool = False
     history: list[ChatMessage] = []
     rewrite_query: bool = True
+    folder_id: int | None = None
+    """Restricts retrieval to chunks from files in this folder."""
+    file_id: int | None = None
+    """Restricts retrieval to a single file's own chunks (its full content,
+    not similarity-searched). Takes precedence over folder_id."""
 
 
 class SearchResultItem(BaseModel):

@@ -23,12 +23,24 @@ function toHistory(turns: ChatTurn[]): ChatMessage[] {
     .map((turn) => ({ role: turn.role, content: turn.content }));
 }
 
+export interface ChatScope {
+  /** Restricts retrieval to files inside this folder. */
+  folderId?: number;
+  /** Restricts retrieval to a single file's own content. Takes precedence over folderId. */
+  fileId?: number;
+}
+
 /** Multi-turn chat over the streaming `/search/stream` endpoint. Keeps a plain
  * ref mirror of the turn list so sendMessage/retryTurn can read the latest
  * state synchronously and fire their network side effect exactly once,
  * instead of doing it from inside a setState updater (which React may
- * invoke more than once, e.g. under StrictMode). */
-export function useChat() {
+ * invoke more than once, e.g. under StrictMode).
+ *
+ * `scope` narrows retrieval to a folder or a single file — pass a stable
+ * scope per chat instance (e.g. keyed by folder/file id) so conversation
+ * memory isn't shared across different scopes. */
+export function useChat(scope: ChatScope = {}) {
+  const { folderId, fileId } = scope;
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const turnsRef = useRef<ChatTurn[]>([]);
   const abortRef = useRef<AbortController | null>(null);
@@ -64,7 +76,13 @@ export function useChat() {
         const response = await fetch(`${API_BASE_URL}/search/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, top_k: DEFAULT_TOP_K, history }),
+          body: JSON.stringify({
+            query,
+            top_k: DEFAULT_TOP_K,
+            history,
+            folder_id: folderId,
+            file_id: fileId,
+          }),
           signal: controller.signal,
         });
 
@@ -115,7 +133,7 @@ export function useChat() {
         });
       }
     },
-    [updateTurn]
+    [updateTurn, folderId, fileId]
   );
 
   const sendMessage = useCallback(
