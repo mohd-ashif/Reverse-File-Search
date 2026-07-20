@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy.orm import Session
 
 from app.models.chunk import FileChunk
-from app.models.file import FileIndexStatus, IndexedFile
+from app.models.file import FileIndexStatus, FileType, IndexedFile
 from app.repositories.chunk_repository import ChunkRepository
 from app.repositories.entities_repository import EntitiesRepository
 from app.repositories.file_repository import FileRepository
@@ -15,6 +15,7 @@ from app.services.chunking import chunk_text
 from app.services.embedding_service import get_embedding_service
 from app.services.entity_extraction_service import EntityExtractionService
 from app.services.extractors import get_extractor
+from app.services.ocr_correction_service import OCRCorrectionService
 from app.services.scan_progress import ScanStage
 from app.services.tag_extraction_service import TagExtractionService
 from app.services.vector_store import get_vector_store
@@ -32,7 +33,9 @@ class IndexingPipeline:
     vendor, GST, PAN, etc.) and AI category tagging (Invoice, HR, Medical,
     etc.) once a file finishes embedding — see `_extract_entities_safely` and
     `_generate_tags_safely`, neither of which ever lets a failure affect the
-    file's indexing status.
+    file's indexing status. For image files, OCR text is also passed through
+    best-effort mistake correction (see `_correct_ocr_safely`) before
+    chunking/embedding/entity/tag extraction all run on the corrected text.
     """
 
     def __init__(
@@ -40,6 +43,7 @@ class IndexingPipeline:
         db: Session,
         entity_extraction_service: EntityExtractionService | None = None,
         tag_extraction_service: TagExtractionService | None = None,
+        ocr_correction_service: OCRCorrectionService | None = None,
     ):
         self.db = db
         self.file_repo = FileRepository(db)
@@ -50,6 +54,7 @@ class IndexingPipeline:
         self.vector_store = get_vector_store()
         self.entity_extraction_service = entity_extraction_service or EntityExtractionService()
         self.tag_extraction_service = tag_extraction_service or TagExtractionService()
+        self.ocr_correction_service = ocr_correction_service or OCRCorrectionService()
 
     def process_file(self, file: IndexedFile, progress: "ScanProgressTracker | None" = None) -> None:
         if progress:
@@ -65,6 +70,8 @@ class IndexingPipeline:
             if progress:
                 progress.file_failed(file.filename, file.absolute_path, str(exc))
             return
+
+        text = self._correct_ocr_safely(file, text)
 
         file.status = FileIndexStatus.EXTRACTED
         file.error_message = None
@@ -139,6 +146,24 @@ class IndexingPipeline:
         if progress:
             progress.stage(ScanStage.FINALIZING)
         return result
+
+    def _correct_ocr_safely(self, file: IndexedFile, text: str) -> str:
+        """Best-effort OCR mistake correction (e.g. "Inv0ice" -> "Invoice"),
+        applied only to image files since other file types aren't OCR'd. The
+        corrected text becomes what's chunked/embedded/entity-and-tag-extracted,
+        and is also persisted on the file record. Any failure here just keeps
+        the original OCR text as-is — it must never fail indexing."""
+        if file.file_type != FileType.IMAGE:
+            file.corrected_text = None
+            return text
+        try:
+            corrected = self.ocr_correction_service.correct(text)
+        except Exception as exc:  # noqa: BLE001 - must never fail indexing
+            logger.warning("OCR correction failed for file %s: %s", file.id, exc)
+            file.corrected_text = None
+            return text
+        file.corrected_text = corrected
+        return corrected
 
     def _mark_failed(self, file: IndexedFile, error_message: str) -> None:
         file.status = FileIndexStatus.FAILED

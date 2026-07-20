@@ -36,6 +36,10 @@ class IndexedFile(TimestampMixin, Base):
     mtime: Mapped[float] = mapped_column(Float, nullable=False)
     status: Mapped[FileIndexStatus] = mapped_column(Enum(FileIndexStatus), default=FileIndexStatus.PENDING)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    corrected_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    """AI-corrected OCR text (e.g. "Inv0ice" -> "Invoice"), populated only for
+    image files whose text came from OCR. Null for every other file type,
+    since their extraction doesn't go through OCR and has nothing to correct."""
 
     folder: Mapped["MonitoredFolder"] = relationship(back_populates="files")
     chunks: Mapped[list["FileChunk"]] = relationship(back_populates="file", cascade="all, delete-orphan")

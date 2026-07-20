@@ -11,10 +11,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getFileContentUrl } from "@/api/files";
+import { ActionItemsSection } from "@/features/files/ActionItemsSection";
+import { ContractRiskSection } from "@/features/files/ContractRiskSection";
 import { FileChatPanel } from "@/features/files/FileChatPanel";
 import { FileSummarySection } from "@/features/files/FileSummarySection";
 import { TagBadge } from "@/features/files/TagBadge";
-import { useFileTags } from "@/hooks/useFiles";
+import { useExtractedText, useFileTags } from "@/hooks/useFiles";
 import { FILE_STATUS_LABEL, FILE_STATUS_VARIANT, formatBytes, formatDate } from "@/lib/status";
 import type { IndexedFile } from "@/types/file";
 
@@ -34,6 +36,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 
 export function FileDetailDialog({ file, onOpenChange }: FileDetailDialogProps) {
   const { data: fileTags } = useFileTags(file?.id ?? null);
+  const { data: extractedText } = useExtractedText(file?.file_type === "image" ? file.id : null);
   const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
@@ -80,6 +83,16 @@ export function FileDetailDialog({ file, onOpenChange }: FileDetailDialogProps) 
                   <DetailRow label="Folder ID" value={file.folder_id} />
                   <DetailRow label="Created" value={formatDate(file.created_at)} />
                   <DetailRow label="Updated" value={formatDate(file.updated_at)} />
+                  {file.file_type === "image" ? (
+                    <DetailRow
+                      label="OCR"
+                      value={
+                        <Badge variant={extractedText?.was_corrected ? "success" : "secondary"}>
+                          {extractedText?.was_corrected ? "Mistakes corrected" : "Not corrected"}
+                        </Badge>
+                      }
+                    />
+                  ) : null}
                   {fileTags && fileTags.tags.length > 0 ? (
                     <DetailRow
                       label="Tags"
@@ -101,6 +114,8 @@ export function FileDetailDialog({ file, onOpenChange }: FileDetailDialogProps) 
                 </dl>
 
                 <FileSummarySection fileId={file.id} />
+                <ContractRiskSection fileId={file.id} />
+                <ActionItemsSection fileId={file.id} />
               </>
             )}
           </>
