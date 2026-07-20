@@ -1,102 +1,138 @@
-# User Guide — Recent Features
+# User Guide
 
+A complete walkthrough of everything Reverse File Search can do today. For setup, see [`INSTALLATION.md`](INSTALLATION.md). For the full requirements list, see [`SRS.md`](SRS.md). For internals, see [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`API_REFERENCE.md`](API_REFERENCE.md).
 
-This guide covers recent additions to Reverse File Search:
-
-1. **Sensitive file protection** during folder scans
-2. **Chat** — a full conversational interface, grounded in your indexed files
-3. **Smarter search** — your queries are automatically improved before searching
-
-For general setup, see [`INSTALLATION.md`](INSTALLATION.md). For full requirements, see [`SRS.md`](SRS.md).
+The app has four pages, reachable from the top nav: **Overview**, **Folders**, **Files**, **Chat**.
 
 ---
 
-## 1. Sensitive File Protection
+## 1. Overview
 
-When you add or scan a folder, the app automatically checks for files that look like credentials or secrets — for example `.env`, `.pem`, `.key`, `.pfx`, `.kdbx`, `wallet.dat`, `id_rsa`, `credentials.json`, `passwords.txt`.
+A dashboard snapshot: how many folders are monitored, how many files are indexed, how many failed, and a breakdown by indexing status (pending / extracted / indexed / failed). First-time users see a **Getting Started** panel with next-step guidance until at least one folder is added. Quick links jump to Folders, Files, or Chat.
 
-### When adding a folder
+---
 
-On the **Folders** page, click **Add folder** and enter a path. The preview screen shows an estimate of what will be scanned. If sensitive files are detected, you'll see a red warning banner listing how many and a few examples:
+## 2. Folders — register, preview, scan
 
-> ⚠ 2 potentially sensitive files detected (e.g. `.env`, `id_rsa`). These look like credentials or keys and are skipped by default when scanning.
+### Adding a folder
 
-This is informational at this step — no files are indexed yet, since adding a folder only registers the path.
+Click **Add folder** and enter an absolute path. Before it's registered, you'll see a **preview**: estimated file count, how many are of a supported type, an approximate scan duration, estimated storage size, how many files are "large" (≥50MB by default), and — importantly — how many look like **sensitive files** (see below). Nothing is indexed at this step; adding a folder only registers the path.
 
-### When scanning a folder
+Paths are rejected up front with a specific reason if they're: missing, not a directory, permission-denied, locked by another process, an unreachable network location, or "too broad" (e.g. a drive root) — rather than a generic error.
 
-Click **Scan** on a monitored folder. If sensitive files are found, a dialog appears with three choices:
+### Sensitive file protection
 
-| Choice | What happens |
+The app automatically flags files that look like credentials or secrets: `.env`/`.env.*`, `.pem`, `.key`, `.pfx`, `.kdbx`, `wallet.dat`, `id_rsa`/`id_ed25519` (and `.pub` variants), `credentials.json`, `passwords.txt`.
+
+When you click **Scan** on a folder and sensitive files are found, a dialog offers three choices:
+
+| Choice | Effect |
 |---|---|
-| **Skip sensitive files** (default) | Scan proceeds; sensitive files are never opened, chunked, or embedded. Any previously-indexed sensitive file is also removed. |
-| **Continue anyway** | Scan proceeds and sensitive files are indexed like any other supported file. |
-| **Cancel** | Nothing happens — no scan runs. |
+| **Skip sensitive files** (default) | Scan proceeds; these files are never opened, chunked, or embedded. A previously-indexed file that newly matches this pattern is also removed. |
+| **Continue anyway** | Scan proceeds and indexes them like any other supported file. |
+| **Cancel** | Nothing happens. |
 
-If no sensitive files are found, scanning proceeds immediately with no dialog.
+If no sensitive files are found, scanning proceeds immediately with no dialog. **Recommendation:** leave the default unless you specifically intend to make a credential file searchable.
 
-**Recommendation:** leave the default (Skip) unless you specifically intend to make a credential file searchable.
+### Scanning
+
+Clicking **Scan** kicks off a background scan and opens a **live progress dialog** showing each stage in order — finding files → reading metadata → extracting text → generating embeddings → saving to database → finalizing — with a progress bar, current filename, processed/remaining counts, elapsed time, and an ETA. You can close the dialog ("Run in background") and it keeps running; reopening later isn't currently supported mid-run, but the folder/file lists refresh automatically once it finishes. On completion you see a success summary (added/modified/deleted/skipped counts, how many were indexed) and a list of any files that failed, with the reason for each.
+
+A scan only re-processes what actually changed: unchanged files (same modification time) are skipped entirely; a file with a changed modification time but the same content checksum just has its timestamp updated (no re-extraction); files deleted from disk are removed from the index; only genuinely new or changed content is re-extracted and re-embedded.
+
+### Removing a folder
+
+**Remove** stops monitoring it and deletes all of its indexed files, chunks, and vector-store embeddings. This cannot be undone (the files on disk are untouched — only the index is removed).
+
+### Chat with a folder
+
+Each folder row has a **Chat** button — see §4.2 below.
 
 ---
 
-## 2. Chat
+## 3. Files — browse, filter, inspect
 
-The **Chat** page (in the nav where "Search" used to be) is a full conversation with an AI grounded in your indexed files — like chatting with an assistant that has only read your files and nothing else.
+The **Files** page lists every indexed file: filename, type, size, status (pending/extracted/indexed/failed), assigned tags, and when it was indexed. You can:
+- **Search** by filename (debounced live filter).
+- **Filter** by folder and/or by category **tag**.
+- **Sort** by filename, size, status, or indexed date.
+- Page through results.
 
-### Starting a conversation
+### Automatic classification tags
 
-Open **Chat**. With an empty conversation, you'll see a few **suggested questions** you can click instead of typing — handy for getting a feel for what to ask. Otherwise, just type a question and press **Enter** (Shift+Enter for a new line without sending) or tap the send button.
+After a file finishes indexing, it's automatically classified into one or more short category tags — Invoice, Contract, Resume, Tax, Purchase Order, Medical Record, Salary Slip, Bank Statement, Receipt, Letter, or a sensible custom category if none of those fit. Each tag renders as a small colored badge with an icon (e.g. a receipt icon for Receipt, a shopping-cart icon for Purchase Order), shown both in the files table and in a file's detail view. Use the **tag filter** dropdown on the Files page to see only files of a given category. This step is best-effort: if no AI provider is configured, files simply have no tags, and everything else keeps working.
 
-### What you'll see, in order
+### File detail view
 
-1. **Thinking…** — a small animated typing indicator while the request is being set up, before the first word arrives.
-2. **The answer typing itself out** — text appears progressively with a blinking cursor while it's still generating, formatted as proper **Markdown**: headings, lists, tables, and **code blocks** all render properly. Each code block has its own **Copy** button and shows its language if one was specified.
-3. **A "Searched for: ..." note**, if your query was rephrased for a better search match — see §3 below.
-4. **Sources** — clickable badges naming the files the answer is based on. Clicking one that matches an indexed file opens that file's detail view. These come directly from the files actually retrieved, never invented by the AI.
-5. **Confidence** — a percentage under the answer, indicating how well your indexed content supports it.
+Clicking a row (or a citation badge in Chat) opens a detail dialog showing: status, type, size, path, checksum, folder, timestamps, tags, and any error message. From here you can:
+- **View File** — opens the original file in a new browser tab.
+- **Chat** — switches the dialog into a mini conversation scoped to just this file (see §4.3).
+- View or **generate a summary** — see below.
 
-### Conversation history
+### On-demand summaries
 
-Chat remembers your conversation — you can ask a follow-up like "what about the other one?" and it will understand what you mean from the earlier turns. This history is **not saved anywhere** — it lives only in your browser tab for the current session; reloading the page starts a fresh conversation.
+Each file's detail view offers a **structured summary**: an executive summary paragraph, key points, important dates (each described, e.g. "Sept 30, 2024 — GST filing deadline"), people mentioned, organizations mentioned, risks, and action items — all grounded strictly in the file's own text (never invented). Summaries aren't generated automatically at index time; you request one explicitly, and it's cached until you request it again.
 
-### Controls on each message
+### Extracted business fields
 
-| Button | When it appears | What it does |
+For invoice-like documents, the system also extracts structured fields in the background during indexing — invoice number, vendor, customer, GST/PAN numbers, amount, date, email, phone, address, bank, PO number, contract number — available via the API (`GET /files/{id}/entities`) for any integration that wants structured data rather than free text.
+
+---
+
+## 4. Chat — talk to your files
+
+The **Chat** page (nav label "Chat", route `/search`) is a full multi-turn conversation with an AI grounded only in your indexed files.
+
+### 4.1 Starting a conversation
+
+With an empty conversation, you'll see a few clickable **suggested questions**. Otherwise, type and press **Enter** (Shift+Enter for a newline) or tap send.
+
+As you type in the search box, an **autocomplete dropdown** appears with up to three sections — **Recent searches** (your own past queries), **Popular searches** (the most frequent queries across all usage), and **AI-generated searches** (smart suggestions, e.g. "Show GST invoices", "Invoices over ₹50,000", "Contracts signed last month") — updating live as you keep typing.
+
+### 4.2 Folder-scoped chat
+
+From the **Folders** page, click **Chat** on any folder row. You land on the Chat page with a banner reading "Chatting within folder: `<path>`" and folder-flavored starter prompts ("What invoices are unpaid?", "What's the largest purchase?", "Who spent the most?"). Every answer in this conversation is grounded **only** in documents inside that folder — nothing else in your index is considered. Click **Exit folder chat** in the banner to return to the unscoped, all-files conversation. Switching between folders (or back to global) always starts a fresh conversation — history doesn't leak across scopes.
+
+### 4.3 File-scoped chat
+
+Open any file's detail view and click **Chat**. This swaps the dialog into its own mini conversation, with prompts like "Summarize this file.", "Explain clause 4.", "Who signed?", "When was payment made?" — answered using **only that file's content**, in full (not a similarity-searched excerpt), so specific questions about a particular clause or detail aren't at the mercy of a search match missing it. Click **Details** to switch back to the file's metadata view; re-opening the dialog for a different file starts a new conversation.
+
+### 4.4 What you see in a response, in order
+
+1. **Thinking…** — a typing indicator before the first word arrives.
+2. The answer **typing itself out** live, rendered as full Markdown (headings, lists, tables) with syntax-aware, copyable code blocks.
+3. A **"Searched for: …"** note if your query was rephrased for better retrieval (see §4.6) — omitted for file-scoped chat, since nothing is rewritten there.
+4. **Sources** — clickable badges naming the file(s) the answer is based on; clicking one that matches an indexed file opens its detail view. These come directly from what was actually retrieved — never invented.
+5. **Confidence** — a percentage indicating how well your indexed content supports the answer.
+
+### 4.5 Per-message controls
+
+| Control | When | Effect |
 |---|---|---|
-| **Stop** (input bar) | While a response is being generated | Immediately stops generation for that message. It's marked "Generation cancelled." |
-| **Retry** | After a message finishes, is cancelled, or errors | Regenerates just that answer, using the conversation up to that point |
-| **Copy** | As soon as any answer text exists (even mid-generation) | Copies that message's answer text to your clipboard |
+| **Stop** | While generating | Cancels immediately; marked "Generation cancelled." |
+| **Retry** | After done / cancelled / error | Regenerates that answer using the conversation up to that point |
+| **Copy** | As soon as any text exists | Copies the answer text to your clipboard |
 
-### Grounding rules (why answers are trustworthy)
+### 4.6 Smarter search (automatic query rewriting)
 
-- The AI is only shown the text of your top retrieved chunks — it has no access to anything outside your indexed files and no general knowledge is used.
-- If your indexed files don't contain enough information to answer, the response will be exactly:
+For unscoped and folder-scoped chat, your query is automatically rewritten before searching — helpful for short queries or acronyms that wouldn't match file content well as-is (e.g. `GST` → `GST invoices issued during financial year`). This never blocks search (falls back to your original text if unavailable) and never changes the wording of the final answer, only which files get found.
 
-  > "I couldn't find enough information."
+### 4.7 Grounding & trust
 
-  with no sources — the AI will not guess or make something up. This is normal answer text, not an error.
+The AI only ever sees the text of the files actually retrieved for your query — no general knowledge, nothing outside your indexed content. If there isn't enough information, the response is exactly:
 
-### If something goes wrong
+> "I couldn't find enough information."
 
-- **No API key configured / AI temporarily unreachable:** that message shows a distinct error (not the "couldn't find enough information" text) with a **Retry** option.
-- **Connection drops mid-answer:** the message shows an error alongside whatever partial answer had already streamed in, plus **Retry**.
+with no sources — never a guess. Conversation history lives only in your browser tab; nothing conversational is saved anywhere. Reloading the page starts fresh.
 
-### Light / dark mode
+### 4.8 Theme
 
-Use the sun/moon button in the top-right of the header to switch themes. Your choice is remembered for next time; on your very first visit it follows your operating system's theme.
+The sun/moon toggle in the header switches light/dark mode. Your choice is remembered; on your first visit it follows your OS preference.
 
 ---
 
-## 3. Smarter search (automatic query rewriting)
+## 5. If something goes wrong
 
-Before searching your files, your query is automatically improved to get better matches — especially useful for short queries, acronyms, or abbreviations that wouldn't match file content well on their own.
-
-**Example:**
-
-| You type | The app actually searches for |
-|---|---|
-| `GST` | `GST invoices issued during financial year` |
-
-When this happens, you'll see a small note under the answer: *"Searched for: “...”"* — so you always know what was actually matched against your files, even though you get to keep typing short and natural.
-
-This step never blocks your search: if it's unavailable for any reason, your original query is used as-is, exactly like before. It also never changes what the AI's final answer is about — it only affects which files get found, not how the answer is worded.
+- **No API key configured / AI temporarily unreachable:** the affected message shows a distinct error (not the "couldn't find enough information" text), with a **Retry** option. Search itself (folder browsing, plain retrieval) keeps working regardless — only the AI-generated pieces (answers, rewriting, tags, entities, summaries, AI search suggestions) are affected.
+- **Connection drops mid-answer:** the message shows an error alongside whatever partial text had already streamed in, plus Retry.
+- **A scan reports failed files:** check the failure list in the scan-complete summary for the specific error per file (e.g. unreadable/corrupt file, OCR unavailable for an image).
