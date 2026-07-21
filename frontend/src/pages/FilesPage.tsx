@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, FileSearch, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileDiff, FileSearch, Search } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -16,9 +17,11 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CompareFilesDialog, type ComparePair } from "@/features/files/CompareFilesDialog";
 import { FileDetailDialog } from "@/features/files/FileDetailDialog";
+import { TagBadge } from "@/features/files/TagBadge";
 import { useDebounce } from "@/hooks/useDebounce";
-import { useFiles } from "@/hooks/useFiles";
+import { useAllFileTags, useFiles } from "@/hooks/useFiles";
 import { useFolders } from "@/hooks/useFolders";
 import { FILE_STATUS_LABEL, FILE_STATUS_VARIANT, formatBytes, formatDate } from "@/lib/status";
 import type { IndexedFile } from "@/types/file";
@@ -56,16 +59,35 @@ function SortButton({
 
 export function FilesPage() {
   const [folderId, setFolderId] = useState<string>("all");
+  const [tag, setTag] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(1);
   const [selectedFile, setSelectedFile] = useState<IndexedFile | null>(null);
+  const [selectedForCompare, setSelectedForCompare] = useState<number[]>([]);
+  const [comparePair, setComparePair] = useState<ComparePair | null>(null);
 
   const debouncedSearch = useDebounce(search, 300);
   const { data: folders } = useFolders();
   const parsedFolderId = folderId === "all" ? undefined : Number(folderId);
-  const { data: files, isLoading, isError, error, refetch } = useFiles(parsedFolderId);
+  const parsedTag = tag === "all" ? undefined : tag;
+  const { data: files, isLoading, isError, error, refetch } = useFiles(parsedFolderId, parsedTag);
+  const { data: fileTags } = useAllFileTags(parsedFolderId);
+  const tagsByFileId = useMemo(() => {
+    const map = new Map<number, string[]>();
+    for (const entry of fileTags ?? []) {
+      map.set(entry.file_id, entry.tags);
+    }
+    return map;
+  }, [fileTags]);
+  const availableTags = useMemo(() => {
+    const tags = new Set<string>();
+    for (const entry of fileTags ?? []) {
+      for (const t of entry.tags) tags.add(t);
+    }
+    return Array.from(tags).sort((a, b) => a.localeCompare(b));
+  }, [fileTags]);
 
   const filteredAndSorted = useMemo(() => {
     const filtered = (files ?? []).filter((file) =>
@@ -96,6 +118,20 @@ export function FilesPage() {
     setPage(1);
   };
 
+  const toggleCompareSelection = (fileId: number) => {
+    setSelectedForCompare((prev) => {
+      if (prev.includes(fileId)) return prev.filter((id) => id !== fileId);
+      if (prev.length >= 2) return prev;
+      return [...prev, fileId];
+    });
+  };
+
+  const handleCompare = () => {
+    if (selectedForCompare.length !== 2) return;
+    setComparePair({ fileIdA: selectedForCompare[0], fileIdB: selectedForCompare[1] });
+    setSelectedForCompare([]);
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -105,7 +141,18 @@ export function FilesPage() {
 
       <Card>
         <CardHeader className="flex flex-col gap-4 pb-4 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle className="text-base">Files</CardTitle>
+          <div className="flex items-center gap-3">
+            <CardTitle className="text-base">Files</CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={selectedForCompare.length !== 2}
+              onClick={handleCompare}
+            >
+              <FileDiff className="mr-2 h-4 w-4" />
+              Compare {selectedForCompare.length > 0 ? `(${selectedForCompare.length}/2)` : ""}
+            </Button>
+          </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -139,6 +186,25 @@ export function FilesPage() {
                 ))}
               </SelectContent>
             </Select>
+            <Select
+              value={tag}
+              onValueChange={(value) => {
+                setTag(value);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-48" aria-label="Filter by tag">
+                <SelectValue placeholder="All tags" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All tags</SelectItem>
+                {availableTags.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardHeader>
         <CardContent>
@@ -165,6 +231,7 @@ export function FilesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-8" aria-label="Select for comparison" />
                     <TableHead>
                       <SortButton label="Filename" sortKey="filename" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
                     </TableHead>
@@ -175,6 +242,7 @@ export function FilesPage() {
                     <TableHead>
                       <SortButton label="Status" sortKey="status" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
                     </TableHead>
+                    <TableHead>Tags</TableHead>
                     <TableHead>
                       <SortButton label="Indexed" sortKey="created_at" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
                     </TableHead>
@@ -191,6 +259,16 @@ export function FilesPage() {
                         if (event.key === "Enter" || event.key === " ") setSelectedFile(file);
                       }}
                     >
+                      <TableCell onClick={(event) => event.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedForCompare.includes(file.id)}
+                          disabled={!selectedForCompare.includes(file.id) && selectedForCompare.length >= 2}
+                          onChange={() => toggleCompareSelection(file.id)}
+                          aria-label={`Select ${file.filename} for comparison`}
+                          className="h-4 w-4 accent-primary"
+                        />
+                      </TableCell>
                       <TableCell className="max-w-xs truncate font-medium" title={file.filename}>
                         {file.filename}
                       </TableCell>
@@ -198,6 +276,13 @@ export function FilesPage() {
                       <TableCell>{formatBytes(file.size_bytes)}</TableCell>
                       <TableCell>
                         <Badge variant={FILE_STATUS_VARIANT[file.status]}>{FILE_STATUS_LABEL[file.status]}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex max-w-xs flex-wrap gap-1">
+                          {(tagsByFileId.get(file.id) ?? []).map((t) => (
+                            <TagBadge key={t} tag={t} />
+                          ))}
+                        </div>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{formatDate(file.created_at)}</TableCell>
                     </TableRow>
@@ -217,6 +302,7 @@ export function FilesPage() {
       </Card>
 
       <FileDetailDialog file={selectedFile} onOpenChange={(open) => !open && setSelectedFile(null)} />
+      <CompareFilesDialog pair={comparePair} onOpenChange={(open) => !open && setComparePair(null)} />
     </div>
   );
 }

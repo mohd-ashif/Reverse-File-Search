@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { ScanSearch, ShieldAlert, Trash2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+import { MessageSquare, ScanSearch, ShieldAlert, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -15,31 +17,37 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { useDeleteFolder, useEstimateFolder, useScanFolder } from "@/hooks/useFolders";
+import { ScanProgressDialog } from "@/features/folders/ScanProgressDialog";
+import { foldersQueryKey, useDeleteFolder, useEstimateFolder, useStartFolderScan } from "@/hooks/useFolders";
 import type { Folder } from "@/types/folder";
 
 export function FolderRowActions({ folder }: { folder: Folder }) {
-  const scanFolder = useScanFolder();
+  const queryClient = useQueryClient();
+  const startScan = useStartFolderScan();
   const deleteFolder = useDeleteFolder();
   const estimateFolder = useEstimateFolder();
   const [sensitiveWarning, setSensitiveWarning] = useState<{ count: number; samples: string[] } | null>(null);
+  const [activeScanId, setActiveScanId] = useState<string | null>(null);
+  const [progressOpen, setProgressOpen] = useState(false);
 
   const runScan = (skipSensitive: boolean) => {
-    scanFolder.mutate(
+    startScan.mutate(
       { folderId: folder.id, skipSensitive },
       {
-        onSuccess: ({ scan, index }) => {
-          toast.success(`Scan complete: ${folder.path}`, {
-            description: `+${scan.added} added, ${scan.modified} modified, ${scan.deleted} deleted, ${scan.skipped} skipped${
-              scan.skipped_sensitive > 0 ? `, ${scan.skipped_sensitive} sensitive skipped` : ""
-            } · Indexed ${index.embedded}, extracted ${index.extracted}, failed ${index.failed}`,
-          });
+        onSuccess: ({ scan_id }) => {
+          setActiveScanId(scan_id);
+          setProgressOpen(true);
         },
         onError: (error) => {
-          toast.error("Scan failed", { description: error instanceof Error ? error.message : undefined });
+          toast.error("Failed to start scan", { description: error instanceof Error ? error.message : undefined });
         },
       }
     );
+  };
+
+  const handleScanFinished = () => {
+    void queryClient.invalidateQueries({ queryKey: foldersQueryKey });
+    void queryClient.invalidateQueries({ queryKey: ["files"] });
   };
 
   const handleScan = () => {
@@ -76,14 +84,21 @@ export function FolderRowActions({ folder }: { folder: Folder }) {
 
   return (
     <div className="flex items-center justify-end gap-2">
+      <Button variant="outline" size="sm" aria-label={`Chat with ${folder.path}`} asChild>
+        <Link to={`/search?folderId=${folder.id}`}>
+          <MessageSquare className="mr-2 h-4 w-4" />
+          Chat
+        </Link>
+      </Button>
+
       <Button
         variant="outline"
         size="sm"
         onClick={handleScan}
-        disabled={scanFolder.isPending}
+        disabled={startScan.isPending}
         aria-label={`Scan ${folder.path}`}
       >
-        {scanFolder.isPending ? <Spinner className="mr-2" /> : <ScanSearch className="mr-2 h-4 w-4" />}
+        {startScan.isPending ? <Spinner className="mr-2" /> : <ScanSearch className="mr-2 h-4 w-4" />}
         Scan
       </Button>
 
@@ -158,6 +173,14 @@ export function FolderRowActions({ folder }: { folder: Folder }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ScanProgressDialog
+        scanId={activeScanId}
+        folderPath={folder.path}
+        open={progressOpen}
+        onOpenChange={setProgressOpen}
+        onFinished={handleScanFinished}
+      />
     </div>
   );
 }

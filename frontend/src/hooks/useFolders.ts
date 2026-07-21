@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { createFolder, deleteFolder, estimateFolder, listFolders, scanFolder } from "@/api/folders";
+import { createFolder, deleteFolder, estimateFolder, listFolders, scanFolder, startFolderScan } from "@/api/folders";
 import type { FolderCreate } from "@/types/folder";
 
 export const foldersQueryKey = ["folders"] as const;
@@ -47,5 +47,12 @@ export function useScanFolder() {
       void queryClient.invalidateQueries({ queryKey: foldersQueryKey });
       void queryClient.invalidateQueries({ queryKey: ["files"] });
     },
+  });
+}
+
+export function useStartFolderScan() {
+  return useMutation({
+    mutationFn: ({ folderId, skipSensitive = true }: { folderId: number; skipSensitive?: boolean }) =>
+      startFolderScan(folderId, skipSensitive),
   });
 }

@@ -3,7 +3,19 @@ from app.models.chunk import FileChunk
 from app.models.document_entities import DocumentEntities
 from app.models.file import IndexedFile
 from app.models.folder import MonitoredFolder
+from app.models.search_query import SearchQueryLog
 from app.models.summary import FileSummary
+from app.models.tag import FileTag
 from app.models.user import User
 
-__all__ = ["Base", "DocumentEntities", "FileChunk", "FileSummary", "IndexedFile", "MonitoredFolder", "User"]
+__all__ = [
+    "Base",
+    "DocumentEntities",
+    "FileChunk",
+    "FileSummary",
+    "FileTag",
+    "IndexedFile",
+    "MonitoredFolder",
+    "SearchQueryLog",
+    "User",
+]

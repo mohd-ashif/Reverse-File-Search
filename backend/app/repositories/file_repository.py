@@ -1,6 +1,8 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.file import FileIndexStatus, IndexedFile
+from app.models.tag import FileTag
 
 
 class FileRepository:
@@ -22,10 +24,14 @@ class FileRepository:
             query = query.filter(IndexedFile.folder_id == folder_id)
         return query.all()
 
-    def list_all(self, folder_id: int | None = None) -> list[IndexedFile]:
+    def list_all(self, folder_id: int | None = None, tag: str | None = None) -> list[IndexedFile]:
         query = self.db.query(IndexedFile)
         if folder_id is not None:
             query = query.filter(IndexedFile.folder_id == folder_id)
+        if tag is not None:
+            query = query.join(FileTag, FileTag.file_id == IndexedFile.id).filter(
+                func.lower(FileTag.tag) == tag.lower()
+            )
         return query.order_by(IndexedFile.id).all()
 
     def create(self, file_record: IndexedFile) -> IndexedFile:

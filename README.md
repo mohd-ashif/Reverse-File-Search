@@ -1,27 +1,47 @@
 # Reverse File Search
 
-AI-powered reverse file search application. Given a query (text, description, or sample content), the system searches previously indexed files and returns the most relevant matches.
+AI-powered reverse file search application. Instead of searching by filename, you register local folders to monitor; the system extracts, chunks, and embeds their content, then lets you find and converse with that content using natural-language queries.
 
-Rather than uploading files, users register local folders to monitor. The backend recursively scans each folder, extracts text from supported file types, chunks and embeds the text, and stores the embeddings in a Chroma vector store for semantic search.
+Rather than uploading files, users register local folders to monitor. The backend recursively scans each folder, extracts text from supported file types, chunks and embeds the text, and stores the embeddings in a Chroma vector store for semantic search. Beyond search, the system also automatically classifies documents into categories, extracts structured business fields, generates on-demand summaries, and provides an AI chat interface — globally, scoped to a folder, or scoped to a single file.
 
-**Implemented:** folder registration/scanning (`MonitoredFolder`, `FileScannerService`), text extraction per file type, chunking + embedding pipeline (`IndexingPipeline`), Chroma-backed vector search (`SearchService`).
-**Not yet implemented:** auth flows.
+**Implemented:**
+- Folder registration/scanning (`MonitoredFolder`, `FileScannerService`), synchronous or as a background job with live WebSocket progress.
+- Sensitive-file detection (credentials/keys), skipped from indexing by default.
+- Text extraction per file type (PDF, DOCX, TXT, Markdown, Excel, image OCR), chunking + embedding pipeline (`IndexingPipeline`), Chroma-backed vector search (`SearchService`).
+- Automatic document classification into category tags (Invoice, Contract, Resume, Tax, Purchase Order, Medical Record, Salary Slip, Bank Statement, Receipt, Letter, or custom), shown as colored icon badges, filterable.
+- Structured entity extraction (invoice number, vendor, GST/PAN, amount, date, contact details, etc.).
+- On-demand structured document summaries.
+- Groq-backed query rewriting, AI-generated grounded answers (streaming + non-streaming), and search-box autocomplete (recent/popular/AI-generated suggestions).
+- Multi-turn AI chat, unscoped, folder-scoped, or single-file-scoped, with isolated conversation memory per scope and source citations.
+
+**Not yet implemented:** authentication/authorization enforcement; per-user data isolation.
+
+## Documentation
+
+| Document | Covers |
+|---|---|
+| [`docs/SRS.md`](docs/SRS.md) | Full functional & non-functional requirements |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System design, service map, data model, indexing/search pipelines |
+| [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) | Complete REST/SSE/WebSocket API reference |
+| [`docs/INSTALLATION.md`](docs/INSTALLATION.md) | Setup, local dev, Docker, migrations, tests |
+| [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) | End-to-end walkthrough of every feature |
 
 ## Tech Stack
 
 **Frontend**
-- React + Vite
-- TailwindCSS
-- shadcn/ui
+- React + Vite + TypeScript
+- TailwindCSS + shadcn/ui
 - React Router
+- TanStack Query (server state)
 - Axios
-- Zustand
 
 **Backend**
-- FastAPI
-- SQLAlchemy (ORM)
-- SQLite (database)
-- Alembic (migrations)
+- FastAPI + Uvicorn
+- SQLAlchemy (ORM) + Alembic (migrations)
+- PostgreSQL (relational metadata)
+- ChromaDB (persistent vector store)
+- sentence-transformers (embeddings)
+- Groq Cloud (optional LLM backend for query rewriting, AI answers, tagging, entity extraction, summaries, search suggestions)
 
 ## Project Structure
 
@@ -29,88 +49,33 @@ Rather than uploading files, users register local folders to monitor. The backen
 Reverse File Search/
 ├── backend/
 │   ├── app/
-│   │   ├── api/            # HTTP layer (versioned routers, endpoints, deps)
-│   │   │   └── v1/
-│   │   │       └── endpoints/
-│   │   ├── core/           # config, security, logging
-│   │   ├── db/             # engine/session, declarative base
-│   │   ├── models/         # SQLAlchemy ORM models
-│   │   ├── schemas/        # Pydantic request/response schemas
-│   │   ├── services/       # business logic
-│   │   ├── repositories/   # data access layer
-│   │   ├── utils/          # shared helpers
-│   │   └── main.py         # FastAPI app entrypoint
-│   ├── alembic/            # migrations
-│   ├── storage/            # uploaded files + search index artifacts
+│   │   ├── api/v1/endpoints/   # health, folders, files, search, ws
+│   │   ├── core/               # config, logging
+│   │   ├── db/                 # engine/session, declarative base
+│   │   ├── models/             # SQLAlchemy ORM models
+│   │   ├── schemas/            # Pydantic request/response schemas
+│   │   ├── services/           # business logic
+│   │   ├── repositories/       # data access layer
+│   │   └── main.py             # FastAPI app entrypoint
+│   ├── alembic/                # migrations
+│   ├── storage/                # Chroma persistent vector store
 │   ├── tests/
-│   ├── requirements.txt
-│   └── alembic.ini
+│   └── requirements.txt
 ├── frontend/
 │   ├── src/
-│   │   ├── api/            # axios client + endpoint wrappers
-│   │   ├── components/
-│   │   │   ├── ui/         # shadcn/ui primitives
-│   │   │   ├── layout/     # app shell/layout components
-│   │   │   └── common/     # shared components
-│   │   ├── features/       # feature modules (search, upload, files)
+│   │   ├── api/                # axios client + endpoint wrappers
+│   │   ├── components/         # ui primitives, layout, shared
+│   │   ├── features/           # folders, files, chat feature modules
 │   │   ├── hooks/
-│   │   ├── lib/            # utils (cn, etc.)
-│   │   ├── pages/          # route-level pages
-│   │   ├── router/         # React Router config
-│   │   ├── store/          # Zustand stores
-│   │   ├── styles/         # global css
-│   │   └── types/          # shared TS types
-│   ├── package.json
-│   └── vite.config.ts
-├── docker/
-│   ├── backend.Dockerfile
-│   └── frontend.Dockerfile
-├── docs/
-├── docker-compose.yml
-└── README.md
+│   │   ├── lib/
+│   │   ├── pages/
+│   │   ├── router/
+│   │   └── types/
+│   └── package.json
+├── docker/                     # backend.Dockerfile, frontend.Dockerfile
+├── docs/                       # SRS, architecture, API reference, guides
+└── docker-compose.yml
 ```
-
-## Backend Architecture
-
-Layered/modular design:
-
-- **api** — routing and request/response handling only, no business logic
-- **schemas** — Pydantic models for validation/serialization, decoupled from ORM models
-- **services** — business logic, orchestrates repositories
-- **repositories** — data access, isolates SQLAlchemy queries from services
-- **models** — SQLAlchemy ORM table definitions
-- **core** — cross-cutting config, security, logging
-
-Request flow: `endpoint -> service -> repository -> model`
-
-## Database Schema (current)
-
-- **monitored_folders** — id, path, is_active, timestamps
-- **indexed_files** — id, folder_id (FK -> monitored_folders), absolute_path, filename, extension, file_type, size_bytes, checksum, mtime, status, error_message, timestamps
-- **file_chunks** — id, file_id (FK -> indexed_files), chunk_index, chroma_id, char_count, timestamps
-
-Embeddings themselves live in a Chroma persistent collection (`storage/chroma`), keyed by `chroma_id`; SQL rows track provenance and reconciliation state.
-
-Schema will evolve via Alembic migrations as features are implemented.
-
-## API Structure
-
-Base prefix: `/api/v1`
-
-| Method | Path                     | Description                             |
-|--------|--------------------------|------------------------------------------|
-| GET    | `/health`                | Service health check                    |
-| GET    | `/folders`               | List monitored folders                  |
-| POST   | `/folders`               | Register a folder to monitor            |
-| DELETE | `/folders/{folder_id}`   | Stop monitoring a folder                |
-| POST   | `/folders/{folder_id}/scan` | Scan folder for changes and re-index |
-| GET    | `/files`                 | List indexed files                      |
-| GET    | `/files/{file_id}`       | Get a single indexed file record        |
-| POST   | `/search`                | Reverse file search (embedding-based)   |
-
-## Environment Configuration
-
-See `backend/.env.example` and `frontend/.env.example`. Copy each to `.env` before running.
 
 ## Getting Started
 
