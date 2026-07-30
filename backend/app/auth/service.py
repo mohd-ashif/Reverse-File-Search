@@ -50,7 +50,7 @@ __all__ = [
 
 EMAIL_VERIFICATION_EXPIRE_HOURS = 24
 PASSWORD_RESET_EXPIRE_HOURS = 1
-DEFAULT_SELF_REGISTER_ROLE = "Employee"
+DEFAULT_SELF_REGISTER_ROLE = "Organization Admin"
 
 
 class AuthError(Exception):
@@ -143,19 +143,31 @@ class AuthService:
                 resource_id=str(org.id),
             )
         else:
-            org = self.org_repo.get_platform_owner_org()
-            if org is not None:
-                self.user_repo.update(user, organization_id=org.id)
-                role = self.role_repo.assign_role_to_user(
-                    user_id=user.id, role_name=DEFAULT_SELF_REGISTER_ROLE, organization_id=org.id
-                )
-                self.org_repo.add_member(
-                    organization_id=org.id,
-                    user_id=user.id,
-                    role_id=role.role_id,
-                    status=OrganizationMemberStatus.JOINED,
-                    is_primary=True,
-                )
+            # Every other self-registered user gets their own organization, so
+            # their folders/files (both scoped by organization_id) are never
+            # visible to any other user - each signup is its own isolated
+            # tenant, not a shared workspace. Joining an existing org only
+            # happens via an explicit invitation (see accept_invitation).
+            org_name = f"{full_name or email}'s Organization"
+            org = self.org_repo.create_with_defaults(name=org_name)
+            self.user_repo.update(user, organization_id=org.id)
+            role = self.role_repo.assign_role_to_user(
+                user_id=user.id, role_name=DEFAULT_SELF_REGISTER_ROLE, organization_id=org.id
+            )
+            self.org_repo.add_member(
+                organization_id=org.id,
+                user_id=user.id,
+                role_id=role.role_id,
+                status=OrganizationMemberStatus.OWNER,
+                is_primary=True,
+            )
+            self.audit_log.log(
+                user_id=user.id,
+                organization_id=org.id,
+                action="organization_created",
+                resource_type="organization",
+                resource_id=str(org.id),
+            )
 
         self.audit_log.log(user_id=user.id, organization_id=user.organization_id, action="user_registered")
         self._issue_and_send_verification(user)
