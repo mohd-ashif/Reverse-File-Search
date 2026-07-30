@@ -1,4 +1,5 @@
-import { API_BASE_URL, apiClient, ApiError } from "@/api/client";
+import { authAxios as apiClient } from "@/api/auth/axios";
+import { API_BASE_URL, ApiError } from "@/api/client";
 import type { ActionItemsResult } from "@/types/actionItems";
 import type { FileCompareResult } from "@/types/compare";
 import type { ContractRiskAnalysis } from "@/types/contractRisk";

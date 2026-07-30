@@ -3,14 +3,26 @@ from sqlalchemy.orm import Session
 
 from app.models.file import FileIndexStatus, FileType, IndexedFile
 from app.models.folder import MonitoredFolder
+from app.models.organization import Organization
 from app.services.groq_client import GroqClient
+
+
+def _get_or_create_org(db_session: Session) -> Organization:
+    """Reuses the `test_org` fixture's row (same slug) when `auth_client` is
+    also in play, since `organization_id` is a required FK on folders/files."""
+    org = db_session.query(Organization).filter(Organization.slug == "test-org").first()
+    if org is None:
+        org = Organization(name="Test Org", slug="test-org")
+        db_session.add(org)
+        db_session.flush()
+    return org
 
 
 def _get_or_create_folder(db_session: Session, tmp_path) -> MonitoredFolder:
     existing = db_session.query(MonitoredFolder).filter(MonitoredFolder.path == str(tmp_path)).first()
     if existing is not None:
         return existing
-    folder = MonitoredFolder(path=str(tmp_path))
+    folder = MonitoredFolder(path=str(tmp_path), organization_id=_get_or_create_org(db_session).id)
     db_session.add(folder)
     db_session.flush()
     return folder
@@ -24,6 +36,7 @@ def _create_file(db_session: Session, tmp_path, name: str, content: str = "hello
 
     file_record = IndexedFile(
         folder_id=folder.id,
+        organization_id=folder.organization_id,
         absolute_path=str(target),
         filename=name,
         extension=".txt",
@@ -58,48 +71,48 @@ class FakeGroqClient(GroqClient):
         return self._response
 
 
-def test_compare_404_when_file_a_missing(client: TestClient, db_session: Session, tmp_path, monkeypatch) -> None:
+def test_compare_404_when_file_a_missing(auth_client: TestClient, db_session: Session, tmp_path, monkeypatch) -> None:
     file_b = _create_file(db_session, tmp_path, "b.txt")
     monkeypatch.setattr("app.services.compare_service.get_groq_client", lambda: FakeGroqClient())
 
-    response = client.post("/api/v1/files/compare", json={"file_id_a": 999999, "file_id_b": file_b.id})
+    response = auth_client.post("/api/v1/files/compare", json={"file_id_a": 999999, "file_id_b": file_b.id})
     assert response.status_code == 404
 
 
-def test_compare_404_when_file_b_missing(client: TestClient, db_session: Session, tmp_path, monkeypatch) -> None:
+def test_compare_404_when_file_b_missing(auth_client: TestClient, db_session: Session, tmp_path, monkeypatch) -> None:
     file_a = _create_file(db_session, tmp_path, "a.txt")
     monkeypatch.setattr("app.services.compare_service.get_groq_client", lambda: FakeGroqClient())
 
-    response = client.post("/api/v1/files/compare", json={"file_id_a": file_a.id, "file_id_b": 999999})
+    response = auth_client.post("/api/v1/files/compare", json={"file_id_a": file_a.id, "file_id_b": 999999})
     assert response.status_code == 404
 
 
-def test_compare_503_when_not_configured(client: TestClient, db_session: Session, tmp_path, monkeypatch) -> None:
+def test_compare_503_when_not_configured(auth_client: TestClient, db_session: Session, tmp_path, monkeypatch) -> None:
     file_a = _create_file(db_session, tmp_path, "a.txt")
     file_b = _create_file(db_session, tmp_path, "b.txt")
     monkeypatch.setattr(
         "app.services.compare_service.get_groq_client", lambda: FakeGroqClient(configured=False)
     )
 
-    response = client.post("/api/v1/files/compare", json={"file_id_a": file_a.id, "file_id_b": file_b.id})
+    response = auth_client.post("/api/v1/files/compare", json={"file_id_a": file_a.id, "file_id_b": file_b.id})
     assert response.status_code == 503
 
 
-def test_compare_422_when_a_file_has_no_text(client: TestClient, db_session: Session, tmp_path, monkeypatch) -> None:
+def test_compare_422_when_a_file_has_no_text(auth_client: TestClient, db_session: Session, tmp_path, monkeypatch) -> None:
     file_a = _create_file(db_session, tmp_path, "a.txt", content="")
     file_b = _create_file(db_session, tmp_path, "b.txt")
     monkeypatch.setattr("app.services.compare_service.get_groq_client", lambda: FakeGroqClient())
 
-    response = client.post("/api/v1/files/compare", json={"file_id_a": file_a.id, "file_id_b": file_b.id})
+    response = auth_client.post("/api/v1/files/compare", json={"file_id_a": file_a.id, "file_id_b": file_b.id})
     assert response.status_code == 422
 
 
-def test_compare_returns_structured_result(client: TestClient, db_session: Session, tmp_path, monkeypatch) -> None:
+def test_compare_returns_structured_result(auth_client: TestClient, db_session: Session, tmp_path, monkeypatch) -> None:
     file_a = _create_file(db_session, tmp_path, "a.txt", content="Contract total: $1,200. Force majeure clause included.")
     file_b = _create_file(db_session, tmp_path, "b.txt", content="Contract total: $1,450. Late payment penalty clause included.")
     monkeypatch.setattr("app.services.compare_service.get_groq_client", lambda: FakeGroqClient())
 
-    response = client.post("/api/v1/files/compare", json={"file_id_a": file_a.id, "file_id_b": file_b.id})
+    response = auth_client.post("/api/v1/files/compare", json={"file_id_a": file_a.id, "file_id_b": file_b.id})
     assert response.status_code == 200
     body = response.json()
     assert body["file_a"] == "a.txt"

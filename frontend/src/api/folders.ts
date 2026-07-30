@@ -1,4 +1,4 @@
-import { apiClient } from "@/api/client";
+import { authAxios as apiClient } from "@/api/auth/axios";
 import type { Folder, FolderCreate } from "@/types/folder";
 import type { FolderEstimate, FolderScanResponse, StartScanResponse } from "@/types/scan";
 

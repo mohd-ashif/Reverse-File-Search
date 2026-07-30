@@ -33,25 +33,37 @@ class SearchService:
     def __init__(
         self,
         db: Session,
+        organization_id: int | None = None,
         answer_service: AnswerService | None = None,
         query_rewrite_service: QueryRewriteService | None = None,
         embedding_service=None,
         vector_store=None,
     ):
         self.db = db
-        self.file_repo = FileRepository(db)
+        self.organization_id = organization_id
+        self.file_repo = FileRepository(db, organization_id=organization_id)
         self.chunk_repo = ChunkRepository(db)
         self.embedding_service = embedding_service or get_embedding_service()
         self.vector_store = vector_store or get_vector_store()
         self.answer_service = answer_service or AnswerService()
         self.query_rewrite_service = query_rewrite_service or QueryRewriteService()
 
+    def _build_where(self, folder_id: int | None) -> dict | None:
+        conditions = []
+        if folder_id is not None:
+            conditions.append({"folder_id": folder_id})
+        if self.organization_id is not None:
+            conditions.append({"organization_id": self.organization_id})
+        if not conditions:
+            return None
+        return conditions[0] if len(conditions) == 1 else {"$and": conditions}
+
     def retrieve(self, query_text: str, top_k: int, folder_id: int | None = None) -> list[SearchResultItem]:
         if not query_text.strip():
             return []
 
         query_embedding = self.embedding_service.embed([query_text])[0]
-        where = {"folder_id": folder_id} if folder_id is not None else None
+        where = self._build_where(folder_id)
         raw = self.vector_store.query(query_embedding, top_k=top_k, where=where)
 
         ids = raw.get("ids", [[]])[0]

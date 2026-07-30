@@ -10,8 +10,8 @@ from app.schemas.tag import FileTagsRead
 
 
 class FileService:
-    def __init__(self, db: Session):
-        self.repository = FileRepository(db)
+    def __init__(self, db: Session, organization_id: int | None = None):
+        self.repository = FileRepository(db, organization_id=organization_id)
         self.entities_repo = EntitiesRepository(db)
         self.tag_repo = TagRepository(db)
 
@@ -22,6 +22,8 @@ class FileService:
         return self.repository.list_all(folder_id, tag)
 
     def get_entities(self, file_id: int) -> DocumentEntities | None:
+        if self.repository.get(file_id) is None:
+            return None
         return self.entities_repo.get_by_file(file_id)
 
     def get_tags(self, file_id: int) -> FileTagsRead | None:

@@ -173,6 +173,7 @@ class FileScannerService:
         checksum = compute_checksum(file_path)
         file_record = IndexedFile(
             folder_id=folder.id,
+            organization_id=folder.organization_id,
             absolute_path=absolute_path,
             filename=file_path.name,
             extension=file_path.suffix.lower(),

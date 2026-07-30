@@ -13,5 +13,8 @@ class FileTag(TimestampMixin, Base):
 
     file_id: Mapped[int] = mapped_column(ForeignKey("indexed_files.id", ondelete="CASCADE"), nullable=False)
     tag: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
 
     file: Mapped["IndexedFile"] = relationship(back_populates="tags")

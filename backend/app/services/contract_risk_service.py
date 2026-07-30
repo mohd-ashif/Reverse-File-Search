@@ -58,8 +58,8 @@ class ContractRiskService:
     termination clause), explained in plain language, grounded strictly in
     the file's own text. Not persisted — generated fresh on each request."""
 
-    def __init__(self, db, client: GroqClient | None = None) -> None:
-        self.file_repo = FileRepository(db)
+    def __init__(self, db, organization_id: int | None = None, client: GroqClient | None = None) -> None:
+        self.file_repo = FileRepository(db, organization_id=organization_id)
         self._client = client or get_groq_client()
 
     @property

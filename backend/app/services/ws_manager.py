@@ -14,7 +14,12 @@ class ScanConnectionManager:
         self._lock = asyncio.Lock()
 
     async def connect(self, scan_id: str, websocket: WebSocket) -> None:
-        await websocket.accept()
+        """Registers an already-accepted websocket.
+
+        Callers must authenticate/authorize and call `websocket.accept()`
+        themselves before registering - this manager no longer accepts on
+        their behalf, so an unauthorized client's socket is never accepted.
+        """
         async with self._lock:
             self._connections.setdefault(scan_id, []).append(websocket)
 

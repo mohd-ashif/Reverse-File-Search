@@ -10,12 +10,12 @@ class EntitiesRepository:
     def get_by_file(self, file_id: int) -> DocumentEntities | None:
         return self.db.query(DocumentEntities).filter(DocumentEntities.file_id == file_id).first()
 
-    def upsert(self, file_id: int, data: dict) -> DocumentEntities:
+    def upsert(self, file_id: int, data: dict, organization_id: int | None = None) -> DocumentEntities:
         """Creates the file's extracted entities, or overwrites them in place if
         already present (re-indexing replaces the previous extraction)."""
         existing = self.get_by_file(file_id)
         if existing is None:
-            existing = DocumentEntities(file_id=file_id, **data)
+            existing = DocumentEntities(file_id=file_id, organization_id=organization_id, **data)
             self.db.add(existing)
         else:
             for key, value in data.items():

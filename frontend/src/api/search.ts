@@ -1,4 +1,4 @@
-import { apiClient } from "@/api/client";
+import { authAxios as apiClient } from "@/api/auth/axios";
 import type { SearchSuggestions } from "@/types/searchSuggestions";
 
 export async function getSearchSuggestions(q: string): Promise<SearchSuggestions> {

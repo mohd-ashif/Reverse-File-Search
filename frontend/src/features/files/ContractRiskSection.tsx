@@ -3,6 +3,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { useAnalyzeContractRisks } from "@/hooks/useFiles";
 import { cn } from "@/lib/utils";
 
@@ -32,10 +33,12 @@ export function ContractRiskSection({ fileId }: ContractRiskSectionProps) {
           <ShieldAlert className="h-4 w-4 text-primary" />
           Contract Risk Analysis
         </h3>
-        <Button type="button" variant="outline" size="sm" onClick={handleAnalyze} disabled={isPending}>
-          {isPending ? <Spinner className="mr-2" /> : <ShieldAlert className="mr-2 h-3.5 w-3.5" />}
-          {isPending ? "Analyzing…" : data ? "Re-analyze" : "Analyze Risks"}
-        </Button>
+        <PermissionGuard permission="file.read">
+          <Button type="button" variant="outline" size="sm" onClick={handleAnalyze} disabled={isPending}>
+            {isPending ? <Spinner className="mr-2" /> : <ShieldAlert className="mr-2 h-3.5 w-3.5" />}
+            {isPending ? "Analyzing…" : data ? "Re-analyze" : "Analyze Risks"}
+          </Button>
+        </PermissionGuard>
       </div>
 
       {!data && !isPending && !isError ? (

@@ -54,8 +54,8 @@ class FileCompareService:
     and removed clauses, and financial changes — grounded strictly in both
     files' own extracted text, never outside knowledge."""
 
-    def __init__(self, db, client: GroqClient | None = None) -> None:
-        self.file_repo = FileRepository(db)
+    def __init__(self, db, organization_id: int | None = None, client: GroqClient | None = None) -> None:
+        self.file_repo = FileRepository(db, organization_id=organization_id)
         self._client = client or get_groq_client()
 
     @property

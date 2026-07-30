@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from app.services.folder_path_guard import TOO_BROAD_MESSAGE
 
 
-def test_estimate_folder_counts_supported_and_unsupported_files(client: TestClient, tmp_path) -> None:
+def test_estimate_folder_counts_supported_and_unsupported_files(auth_client: TestClient, tmp_path) -> None:
     target = tmp_path / "reports"
     target.mkdir()
     (target / "notes.txt").write_text("hello world")
@@ -14,7 +14,7 @@ def test_estimate_folder_counts_supported_and_unsupported_files(client: TestClie
     sub.mkdir()
     (sub / "readme.md").write_text("# nested")
 
-    response = client.post("/api/v1/folders/estimate", json={"path": str(target)})
+    response = auth_client.post("/api/v1/folders/estimate", json={"path": str(target)})
 
     assert response.status_code == 200
     body = response.json()
@@ -26,15 +26,15 @@ def test_estimate_folder_counts_supported_and_unsupported_files(client: TestClie
     assert body["large_files_detected"] == 0
 
 
-def test_estimate_folder_rejects_high_risk_paths(client: TestClient) -> None:
-    response = client.post("/api/v1/folders/estimate", json={"path": "C:\\"})
+def test_estimate_folder_rejects_high_risk_paths(auth_client: TestClient) -> None:
+    response = auth_client.post("/api/v1/folders/estimate", json={"path": "C:\\"})
 
     assert response.status_code == 400
     assert response.json()["detail"] == TOO_BROAD_MESSAGE
 
 
-def test_estimate_folder_rejects_nonexistent_directory(client: TestClient) -> None:
-    response = client.post(
+def test_estimate_folder_rejects_nonexistent_directory(auth_client: TestClient) -> None:
+    response = auth_client.post(
         "/api/v1/folders/estimate", json={"path": "C:\\Users\\ADMIN\\this-folder-does-not-exist-xyz"}
     )
 
@@ -42,12 +42,12 @@ def test_estimate_folder_rejects_nonexistent_directory(client: TestClient) -> No
     assert "does not exist" in response.json()["detail"]
 
 
-def test_estimate_folder_does_not_persist_folder(client: TestClient, tmp_path) -> None:
+def test_estimate_folder_does_not_persist_folder(auth_client: TestClient, tmp_path) -> None:
     target = tmp_path / "invoices"
     target.mkdir()
     (target / "invoice.pdf").write_bytes(b"fake-pdf-bytes")
 
-    client.post("/api/v1/folders/estimate", json={"path": str(target)})
-    response = client.get("/api/v1/folders/")
+    auth_client.post("/api/v1/folders/estimate", json={"path": str(target)})
+    response = auth_client.get("/api/v1/folders/")
 
     assert str(target.resolve()) not in [folder["path"] for folder in response.json()]

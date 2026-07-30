@@ -11,5 +11,8 @@ class FileChunk(TimestampMixin, Base):
     chunk_index: Mapped[int] = mapped_column(Integer, default=0)
     chroma_id: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
     char_count: Mapped[int] = mapped_column(Integer, default=0)
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
 
     file: Mapped["IndexedFile"] = relationship(back_populates="chunks")

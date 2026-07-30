@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { getFileContentUrl } from "@/api/files";
 import { ActionItemsSection } from "@/features/files/ActionItemsSection";
 import { ContractRiskSection } from "@/features/files/ContractRiskSection";
@@ -53,12 +54,14 @@ export function FileDetailDialog({ file, onOpenChange }: FileDetailDialogProps) 
               <DialogDescription>File details and indexing metadata</DialogDescription>
             </DialogHeader>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="w-fit" asChild>
-                <a href={getFileContentUrl(file.id)} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="size-4" />
-                  View File
-                </a>
-              </Button>
+              <PermissionGuard permission="file.download">
+                <Button variant="outline" size="sm" className="w-fit" asChild>
+                  <a href={getFileContentUrl(file.id)} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="size-4" />
+                    View File
+                  </a>
+                </Button>
+              </PermissionGuard>
               <Button
                 variant={chatOpen ? "default" : "outline"}
                 size="sm"

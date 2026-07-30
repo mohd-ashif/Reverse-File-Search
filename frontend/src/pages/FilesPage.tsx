@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Input } from "@/components/ui/input";
 import { Pagination } from "@/components/ui/pagination";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import {
   Select,
   SelectContent,
@@ -143,15 +144,17 @@ export function FilesPage() {
         <CardHeader className="flex flex-col gap-4 pb-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <CardTitle className="text-base">Files</CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={selectedForCompare.length !== 2}
-              onClick={handleCompare}
-            >
-              <FileDiff className="mr-2 h-4 w-4" />
-              Compare {selectedForCompare.length > 0 ? `(${selectedForCompare.length}/2)` : ""}
-            </Button>
+            <PermissionGuard permission="file.read">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={selectedForCompare.length !== 2}
+                onClick={handleCompare}
+              >
+                <FileDiff className="mr-2 h-4 w-4" />
+                Compare {selectedForCompare.length > 0 ? `(${selectedForCompare.length}/2)` : ""}
+              </Button>
+            </PermissionGuard>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="relative">

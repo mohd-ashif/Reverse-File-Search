@@ -45,9 +45,34 @@ class Settings(BaseSettings):
     ESTIMATE_BYTES_PER_SECOND: float = 2_000_000.0
 
     SECRET_KEY: str = "change-me-in-env"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
 
     BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:5173"]
+
+    # JWT
+    JWT_PRIVATE_KEY_PATH: str = "./keys/jwt_private.pem"
+    JWT_PUBLIC_KEY_PATH: str = "./keys/jwt_public.pem"
+    JWT_ALGORITHM: str = "RS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    REFRESH_TOKEN_COOKIE_NAME: str = "refresh_token"
+    REFRESH_TOKEN_COOKIE_PATH: str = "/api/v1/auth"
+
+    # SMTP / email
+    SMTP_HOST: str = "localhost"
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "no-reply@example.com"
+    SMTP_FROM_NAME: str = "Reverse File Search"
+    SMTP_USE_TLS: bool = True
+    SMTP_VALIDATE_CERTS: bool = True
+
+    # Frontend URL for building email links (verification/reset links point back to the SPA)
+    FRONTEND_BASE_URL: str = "http://localhost:5173"
+
+    # Account lockout
+    MAX_FAILED_LOGIN_ATTEMPTS: int = 5
+    ACCOUNT_LOCKOUT_MINUTES: int = 15
 
 
 @lru_cache

@@ -50,7 +50,7 @@ function messageForStatus(status: number | null): string {
   }
 }
 
-function parseError(error: AxiosError): ApiError {
+export function parseError(error: AxiosError): ApiError {
   if (error.code === "ECONNABORTED") {
     return new ApiError("The request timed out. Please try again.", null);
   }

@@ -41,12 +41,14 @@ class IndexingPipeline:
     def __init__(
         self,
         db: Session,
+        organization_id: int | None = None,
         entity_extraction_service: EntityExtractionService | None = None,
         tag_extraction_service: TagExtractionService | None = None,
         ocr_correction_service: OCRCorrectionService | None = None,
     ):
         self.db = db
-        self.file_repo = FileRepository(db)
+        self.organization_id = organization_id
+        self.file_repo = FileRepository(db, organization_id=organization_id)
         self.chunk_repo = ChunkRepository(db)
         self.entities_repo = EntitiesRepository(db)
         self.tag_repo = TagRepository(db)
@@ -103,19 +105,26 @@ class IndexingPipeline:
             progress.stage(ScanStage.SAVING_TO_DATABASE, file.filename)
 
         chroma_ids = [f"file-{file.id}-chunk-{index}" for index in range(len(chunks))]
+        base_metadata = {
+            "file_id": file.id,
+            "folder_id": file.folder_id,
+            "absolute_path": file.absolute_path,
+        }
+        if file.organization_id is not None:
+            base_metadata["organization_id"] = file.organization_id
         metadatas = [
-            {
-                "file_id": file.id,
-                "folder_id": file.folder_id,
-                "absolute_path": file.absolute_path,
-                "chunk_index": index,
-            }
-            for index in range(len(chunks))
+            {**base_metadata, "chunk_index": index} for index in range(len(chunks))
         ]
         self.vector_store.upsert(ids=chroma_ids, embeddings=embeddings, documents=chunks, metadatas=metadatas)
 
         chunk_rows = [
-            FileChunk(file_id=file.id, chunk_index=index, chroma_id=chroma_ids[index], char_count=len(chunks[index]))
+            FileChunk(
+                file_id=file.id,
+                organization_id=file.organization_id,
+                chunk_index=index,
+                chroma_id=chroma_ids[index],
+                char_count=len(chunks[index]),
+            )
             for index in range(len(chunks))
         ]
         self.chunk_repo.create_many(chunk_rows)
@@ -178,7 +187,7 @@ class IndexingPipeline:
         try:
             data = self.entity_extraction_service.extract(text)
             if data is not None:
-                self.entities_repo.upsert(file.id, data)
+                self.entities_repo.upsert(file.id, data, organization_id=file.organization_id)
         except Exception as exc:  # noqa: BLE001 - must never fail indexing
             logger.warning("Entity extraction failed for file %s: %s", file.id, exc)
 

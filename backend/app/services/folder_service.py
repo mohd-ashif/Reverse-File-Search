@@ -49,10 +49,11 @@ class FolderTooBroadError(Exception):
 
 
 class FolderService:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, organization_id: int | None = None):
         self.db = db
-        self.folder_repo = FolderRepository(db)
-        self.file_repo = FileRepository(db)
+        self.organization_id = organization_id
+        self.folder_repo = FolderRepository(db, organization_id=organization_id)
+        self.file_repo = FileRepository(db, organization_id=organization_id)
         self.chunk_repo = ChunkRepository(db)
         self.vector_store = get_vector_store()
 

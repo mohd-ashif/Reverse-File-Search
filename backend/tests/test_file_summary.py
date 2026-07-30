@@ -3,11 +3,23 @@ from sqlalchemy.orm import Session
 
 from app.models.file import FileIndexStatus, FileType, IndexedFile
 from app.models.folder import MonitoredFolder
+from app.models.organization import Organization
 from app.services.groq_client import GroqClient
 
 
+def _get_or_create_org(db_session: Session) -> Organization:
+    """Reuses the `test_org` fixture's row (same slug) when `auth_client` is
+    also in play, since `organization_id` is a required FK on folders/files."""
+    org = db_session.query(Organization).filter(Organization.slug == "test-org").first()
+    if org is None:
+        org = Organization(name="Test Org", slug="test-org")
+        db_session.add(org)
+        db_session.flush()
+    return org
+
+
 def _create_file(db_session: Session, tmp_path, content: str = "hello world") -> IndexedFile:
-    folder = MonitoredFolder(path=str(tmp_path))
+    folder = MonitoredFolder(path=str(tmp_path), organization_id=_get_or_create_org(db_session).id)
     db_session.add(folder)
     db_session.flush()
 
@@ -16,6 +28,7 @@ def _create_file(db_session: Session, tmp_path, content: str = "hello world") ->
 
     file_record = IndexedFile(
         folder_id=folder.id,
+        organization_id=folder.organization_id,
         absolute_path=str(target),
         filename="sample.txt",
         extension=".txt",
@@ -52,53 +65,53 @@ class FakeGroqClient(GroqClient):
         return self._response
 
 
-def test_get_summary_404_when_file_missing(client: TestClient) -> None:
-    response = client.get("/api/v1/files/999999/summary")
+def test_get_summary_404_when_file_missing(auth_client: TestClient) -> None:
+    response = auth_client.get("/api/v1/files/999999/summary")
     assert response.status_code == 404
 
 
-def test_get_summary_404_before_generation(client: TestClient, db_session: Session, tmp_path) -> None:
+def test_get_summary_404_before_generation(auth_client: TestClient, db_session: Session, tmp_path) -> None:
     file_record = _create_file(db_session, tmp_path)
 
-    response = client.get(f"/api/v1/files/{file_record.id}/summary")
+    response = auth_client.get(f"/api/v1/files/{file_record.id}/summary")
     assert response.status_code == 404
 
 
-def test_generate_summary_404_when_file_missing(client: TestClient, monkeypatch) -> None:
+def test_generate_summary_404_when_file_missing(auth_client: TestClient, monkeypatch) -> None:
     monkeypatch.setattr(
         "app.services.summary_service.get_groq_client", lambda: FakeGroqClient()
     )
-    response = client.post("/api/v1/files/999999/summary")
+    response = auth_client.post("/api/v1/files/999999/summary")
     assert response.status_code == 404
 
 
-def test_generate_summary_503_when_not_configured(client: TestClient, db_session: Session, tmp_path, monkeypatch) -> None:
+def test_generate_summary_503_when_not_configured(auth_client: TestClient, db_session: Session, tmp_path, monkeypatch) -> None:
     file_record = _create_file(db_session, tmp_path)
     monkeypatch.setattr(
         "app.services.summary_service.get_groq_client", lambda: FakeGroqClient(configured=False)
     )
 
-    response = client.post(f"/api/v1/files/{file_record.id}/summary")
+    response = auth_client.post(f"/api/v1/files/{file_record.id}/summary")
     assert response.status_code == 503
 
 
-def test_generate_summary_422_when_file_has_no_text(client: TestClient, db_session: Session, tmp_path, monkeypatch) -> None:
+def test_generate_summary_422_when_file_has_no_text(auth_client: TestClient, db_session: Session, tmp_path, monkeypatch) -> None:
     file_record = _create_file(db_session, tmp_path, content="")
     monkeypatch.setattr(
         "app.services.summary_service.get_groq_client", lambda: FakeGroqClient()
     )
 
-    response = client.post(f"/api/v1/files/{file_record.id}/summary")
+    response = auth_client.post(f"/api/v1/files/{file_record.id}/summary")
     assert response.status_code == 422
 
 
-def test_generate_and_fetch_summary(client: TestClient, db_session: Session, tmp_path, monkeypatch) -> None:
+def test_generate_and_fetch_summary(auth_client: TestClient, db_session: Session, tmp_path, monkeypatch) -> None:
     file_record = _create_file(db_session, tmp_path, content="Acme Corp invoice due 2024-09-30.")
     monkeypatch.setattr(
         "app.services.summary_service.get_groq_client", lambda: FakeGroqClient()
     )
 
-    generate_response = client.post(f"/api/v1/files/{file_record.id}/summary")
+    generate_response = auth_client.post(f"/api/v1/files/{file_record.id}/summary")
     assert generate_response.status_code == 201
     body = generate_response.json()
     assert body["file_id"] == file_record.id
@@ -111,12 +124,12 @@ def test_generate_and_fetch_summary(client: TestClient, db_session: Session, tmp
     assert body["action_items"] == ["Confirm receipt"]
     assert body["model"]
 
-    fetch_response = client.get(f"/api/v1/files/{file_record.id}/summary")
+    fetch_response = auth_client.get(f"/api/v1/files/{file_record.id}/summary")
     assert fetch_response.status_code == 200
     assert fetch_response.json()["executive_summary"] == "A short summary of the document."
 
 
-def test_regenerate_summary_overwrites_previous(client: TestClient, db_session: Session, tmp_path, monkeypatch) -> None:
+def test_regenerate_summary_overwrites_previous(auth_client: TestClient, db_session: Session, tmp_path, monkeypatch) -> None:
     file_record = _create_file(db_session, tmp_path)
 
     monkeypatch.setattr(
@@ -131,7 +144,7 @@ def test_regenerate_summary_overwrites_previous(client: TestClient, db_session: 
             "action_items": [],
         }),
     )
-    first = client.post(f"/api/v1/files/{file_record.id}/summary")
+    first = auth_client.post(f"/api/v1/files/{file_record.id}/summary")
     assert first.status_code == 201
     assert first.json()["executive_summary"] == "First version."
 
@@ -147,7 +160,7 @@ def test_regenerate_summary_overwrites_previous(client: TestClient, db_session: 
             "action_items": [],
         }),
     )
-    second = client.post(f"/api/v1/files/{file_record.id}/summary")
+    second = auth_client.post(f"/api/v1/files/{file_record.id}/summary")
     assert second.status_code == 201
     assert second.json()["executive_summary"] == "Second version."
     assert second.json()["id"] == first.json()["id"]

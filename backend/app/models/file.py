@@ -40,6 +40,9 @@ class IndexedFile(TimestampMixin, Base):
     """AI-corrected OCR text (e.g. "Inv0ice" -> "Invoice"), populated only for
     image files whose text came from OCR. Null for every other file type,
     since their extraction doesn't go through OCR and has nothing to correct."""
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
 
     folder: Mapped["MonitoredFolder"] = relationship(back_populates="files")
     chunks: Mapped[list["FileChunk"]] = relationship(back_populates="file", cascade="all, delete-orphan")

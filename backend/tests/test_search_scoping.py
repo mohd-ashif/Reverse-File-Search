@@ -5,12 +5,22 @@ from sqlalchemy.orm import Session
 from app.models.chunk import FileChunk
 from app.models.file import FileIndexStatus, FileType, IndexedFile
 from app.models.folder import MonitoredFolder
+from app.models.organization import Organization
 from app.schemas.search import SearchQuery
 from app.services.search_service import SearchService
 
 
+def _get_or_create_org(db_session: Session) -> Organization:
+    org = db_session.query(Organization).filter(Organization.slug == "test-org").first()
+    if org is None:
+        org = Organization(name="Test Org", slug="test-org")
+        db_session.add(org)
+        db_session.flush()
+    return org
+
+
 def _create_folder(db_session: Session, path: str = "/tmp/folder") -> MonitoredFolder:
-    folder = MonitoredFolder(path=path)
+    folder = MonitoredFolder(path=path, organization_id=_get_or_create_org(db_session).id)
     db_session.add(folder)
     db_session.flush()
     return folder
@@ -19,6 +29,7 @@ def _create_folder(db_session: Session, path: str = "/tmp/folder") -> MonitoredF
 def _create_file(db_session: Session, folder: MonitoredFolder, filename: str = "sample.txt") -> IndexedFile:
     file_record = IndexedFile(
         folder_id=folder.id,
+        organization_id=folder.organization_id,
         absolute_path=f"/tmp/{filename}",
         filename=filename,
         extension=".txt",
@@ -34,7 +45,13 @@ def _create_file(db_session: Session, folder: MonitoredFolder, filename: str = "
 
 
 def _add_chunk(db_session: Session, file: IndexedFile, index: int, chroma_id: str) -> FileChunk:
-    chunk = FileChunk(file_id=file.id, chunk_index=index, chroma_id=chroma_id, char_count=10)
+    chunk = FileChunk(
+        file_id=file.id,
+        organization_id=file.organization_id,
+        chunk_index=index,
+        chroma_id=chroma_id,
+        char_count=10,
+    )
     db_session.add(chunk)
     db_session.flush()
     return chunk
@@ -64,6 +81,40 @@ def test_retrieve_passes_folder_id_as_where_filter(db_session: Session) -> None:
     vector_store.query.assert_called_once_with([0.1, 0.2], top_k=5, where={"folder_id": folder.id})
     assert len(results) == 1
     assert results[0].file_id == file_record.id
+
+
+def test_retrieve_combines_folder_id_and_organization_id_with_and(db_session: Session) -> None:
+    org = _get_or_create_org(db_session)
+    folder = _create_folder(db_session)
+
+    embedding_service = MagicMock()
+    embedding_service.embed.return_value = [[0.1, 0.2]]
+    vector_store = MagicMock()
+    vector_store.query.return_value = {"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]}
+
+    service = SearchService(
+        db_session, organization_id=org.id, embedding_service=embedding_service, vector_store=vector_store
+    )
+    service.retrieve("find invoices", top_k=5, folder_id=folder.id)
+
+    vector_store.query.assert_called_once_with(
+        [0.1, 0.2], top_k=5, where={"$and": [{"folder_id": folder.id}, {"organization_id": org.id}]}
+    )
+
+
+def test_retrieve_passes_organization_id_alone_without_and(db_session: Session) -> None:
+    org = _get_or_create_org(db_session)
+    embedding_service = MagicMock()
+    embedding_service.embed.return_value = [[0.1, 0.2]]
+    vector_store = MagicMock()
+    vector_store.query.return_value = {"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]}
+
+    service = SearchService(
+        db_session, organization_id=org.id, embedding_service=embedding_service, vector_store=vector_store
+    )
+    service.retrieve("anything", top_k=5)
+
+    vector_store.query.assert_called_once_with([0.1, 0.2], top_k=5, where={"organization_id": org.id})
 
 
 def test_retrieve_without_folder_id_passes_no_where_filter(db_session: Session) -> None:

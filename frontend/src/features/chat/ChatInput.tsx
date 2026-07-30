@@ -3,8 +3,10 @@ import { Square, ArrowUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { SearchSuggestionsDropdown } from "@/features/chat/SearchSuggestionsDropdown";
 import { useSearchSuggestions } from "@/hooks/useSearchSuggestions";
+import { usePermissionStore } from "@/store/permissionStore";
 
 const MAX_TEXTAREA_HEIGHT_PX = 200;
 
@@ -18,6 +20,7 @@ export function ChatInput({ isStreaming, onSend, onStop }: ChatInputProps) {
   const [value, setValue] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const canSearch = usePermissionStore((s) => s.permissions.includes("search.execute"));
 
   const { data: suggestions, isLoading: suggestionsLoading } = useSearchSuggestions(value, showSuggestions);
 
@@ -29,7 +32,7 @@ export function ChatInput({ isStreaming, onSend, onStop }: ChatInputProps) {
   }, [value]);
 
   const handleSend = (text: string = value) => {
-    if (!text.trim() || isStreaming) return;
+    if (!text.trim() || isStreaming || !canSearch) return;
     onSend(text);
     setValue("");
     setShowSuggestions(false);
@@ -70,15 +73,17 @@ export function ChatInput({ isStreaming, onSend, onStop }: ChatInputProps) {
           <Square className="h-4 w-4" />
         </Button>
       ) : (
-        <Button
-          type="button"
-          size="icon"
-          onClick={() => handleSend()}
-          disabled={!value.trim()}
-          aria-label="Send message"
-        >
-          <ArrowUp className="h-4 w-4" />
-        </Button>
+        <PermissionGuard permission="search.execute">
+          <Button
+            type="button"
+            size="icon"
+            onClick={() => handleSend()}
+            disabled={!value.trim()}
+            aria-label="Send message"
+          >
+            <ArrowUp className="h-4 w-4" />
+          </Button>
+        </PermissionGuard>
       )}
     </div>
   );
