@@ -1,6 +1,8 @@
 """Bootstrap super-admin rules (Rule 1/Rule 2 of the org-onboarding spec):
-first-ever registrant becomes Super Admin + owns a new default org; every
-later registrant becomes an Employee inside that same default org.
+first-ever registrant becomes Super Admin + owns a new platform-owner org;
+every later registrant gets their own separate new organization (as its
+Organization Admin/owner), so no two self-registered users ever share
+folders/files.
 
 `UserRepository.count` is monkeypatched rather than relying on the shared
 test database actually having zero rows, since that precondition can't be
@@ -47,7 +49,7 @@ def test_first_user_becomes_super_admin_and_owns_new_org(db_session: Session, mo
     assert role_names == ["Super Admin"]
 
 
-def test_second_user_becomes_employee_in_the_default_org(db_session: Session, monkeypatch) -> None:
+def test_second_user_gets_their_own_separate_organization(db_session: Session, monkeypatch) -> None:
     _patch_mailer(monkeypatch)
 
     monkeypatch.setattr(UserRepository, "count", lambda self: 0)
@@ -59,14 +61,18 @@ def test_second_user_becomes_employee_in_the_default_org(db_session: Session, mo
 
     assert second_user.is_superadmin is False
     assert second_user.is_platform_owner is False
-    assert second_user.organization_id == default_org_id
+    assert second_user.organization_id is not None
+    assert second_user.organization_id != default_org_id
 
     membership = (
         db_session.query(OrganizationUser)
-        .filter(OrganizationUser.user_id == second_user.id, OrganizationUser.organization_id == default_org_id)
+        .filter(OrganizationUser.user_id == second_user.id, OrganizationUser.organization_id == second_user.organization_id)
         .one()
     )
-    assert membership.status == OrganizationMemberStatus.JOINED
+    assert membership.status == OrganizationMemberStatus.OWNER
+    assert membership.is_primary is True
 
-    role_names = AuthService(db_session).role_repo.get_role_names_for_user(second_user.id, organization_id=default_org_id)
-    assert role_names == ["Employee"]
+    role_names = AuthService(db_session).role_repo.get_role_names_for_user(
+        second_user.id, organization_id=second_user.organization_id
+    )
+    assert role_names == ["Organization Admin"]
