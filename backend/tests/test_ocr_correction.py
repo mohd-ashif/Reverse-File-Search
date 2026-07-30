@@ -6,16 +6,28 @@ from sqlalchemy.orm import Session
 
 from app.models.file import FileIndexStatus, FileType, IndexedFile
 from app.models.folder import MonitoredFolder
+from app.models.organization import Organization
 from app.services.groq_client import GroqClient
 from app.services.indexing_pipeline import IndexingPipeline
 from app.services.ocr_correction_service import MAX_CHARS, OCRCorrectionService
+
+
+def _get_or_create_org(db_session: Session) -> Organization:
+    """Reuses the `test_org` fixture's row (same slug) when `auth_client` is
+    also in play, since `organization_id` is a required FK on folders/files."""
+    org = db_session.query(Organization).filter(Organization.slug == "test-org").first()
+    if org is None:
+        org = Organization(name="Test Org", slug="test-org")
+        db_session.add(org)
+        db_session.flush()
+    return org
 
 
 def _get_or_create_folder(db_session: Session, tmp_path) -> MonitoredFolder:
     existing = db_session.query(MonitoredFolder).filter(MonitoredFolder.path == str(tmp_path)).first()
     if existing is not None:
         return existing
-    folder = MonitoredFolder(path=str(tmp_path))
+    folder = MonitoredFolder(path=str(tmp_path), organization_id=_get_or_create_org(db_session).id)
     db_session.add(folder)
     db_session.flush()
     return folder
@@ -29,6 +41,7 @@ def _create_file(db_session: Session, tmp_path, file_type: FileType, content: st
 
     file_record = IndexedFile(
         folder_id=folder.id,
+        organization_id=folder.organization_id,
         absolute_path=str(target),
         filename=target.name,
         extension=".txt",
@@ -131,27 +144,27 @@ def test_pipeline_ocr_correction_failure_keeps_original_text(db_session: Session
 # --- GET /files/{id}/extracted-text ---
 
 
-def test_get_extracted_text_404_when_missing(client: TestClient) -> None:
-    response = client.get("/api/v1/files/999999/extracted-text")
+def test_get_extracted_text_404_when_missing(auth_client: TestClient) -> None:
+    response = auth_client.get("/api/v1/files/999999/extracted-text")
     assert response.status_code == 404
 
 
-def test_get_extracted_text_defaults_when_never_corrected(client: TestClient, db_session: Session, tmp_path) -> None:
+def test_get_extracted_text_defaults_when_never_corrected(auth_client: TestClient, db_session: Session, tmp_path) -> None:
     file_record = _create_file(db_session, tmp_path, FileType.TXT)
 
-    response = client.get(f"/api/v1/files/{file_record.id}/extracted-text")
+    response = auth_client.get(f"/api/v1/files/{file_record.id}/extracted-text")
     assert response.status_code == 200
     body = response.json()
     assert body["corrected_text"] is None
     assert body["was_corrected"] is False
 
 
-def test_get_extracted_text_returns_stored_correction(client: TestClient, db_session: Session, tmp_path) -> None:
+def test_get_extracted_text_returns_stored_correction(auth_client: TestClient, db_session: Session, tmp_path) -> None:
     file_record = _create_file(db_session, tmp_path, FileType.IMAGE)
     file_record.corrected_text = "Invoice total: GSTIN 123"
     db_session.flush()
 
-    response = client.get(f"/api/v1/files/{file_record.id}/extracted-text")
+    response = auth_client.get(f"/api/v1/files/{file_record.id}/extracted-text")
     assert response.status_code == 200
     body = response.json()
     assert body["corrected_text"] == "Invoice total: GSTIN 123"

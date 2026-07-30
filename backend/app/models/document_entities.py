@@ -28,5 +28,8 @@ class DocumentEntities(TimestampMixin, Base):
     bank: Mapped[str | None] = mapped_column(String(255), nullable=True)
     po_number: Mapped[str | None] = mapped_column(String(255), nullable=True)
     contract_number: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
 
     file: Mapped["IndexedFile"] = relationship(back_populates="entities")

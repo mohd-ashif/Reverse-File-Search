@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { AddFolderDialog } from "@/features/folders/AddFolderDialog";
 import { FolderRowActions } from "@/features/folders/FolderRowActions";
 import { useFolders } from "@/hooks/useFolders";
@@ -23,7 +24,9 @@ export function FoldersPage() {
             Add folders to watch, then scan them to extract and index their files for search.
           </p>
         </div>
-        <AddFolderDialog />
+        <PermissionGuard permission="folder.create">
+          <AddFolderDialog />
+        </PermissionGuard>
       </div>
 
       <Card>
@@ -75,7 +78,11 @@ export function FoldersPage() {
               icon={FolderOpen}
               title="No folders monitored yet"
               description="Add your first folder to start indexing files for search."
-              action={<AddFolderDialog />}
+              action={
+                <PermissionGuard permission="folder.create">
+                  <AddFolderDialog />
+                </PermissionGuard>
+              }
             />
           )}
         </CardContent>

@@ -6,6 +6,7 @@ backend/*.db
 backend/storage/chroma/*
 !backend/storage/chroma/.gitkeep
 backend/.env
+backend/keys/
 
 # Frontend
 frontend/node_modules/

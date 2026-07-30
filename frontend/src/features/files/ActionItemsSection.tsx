@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { useExtractActionItems } from "@/hooks/useFiles";
 import { cn } from "@/lib/utils";
 import type { ActionItemPriority } from "@/types/actionItems";
@@ -50,10 +51,12 @@ export function ActionItemsSection({ fileId }: ActionItemsSectionProps) {
           <ListTodo className="h-4 w-4 text-primary" />
           Action Items
         </h3>
-        <Button type="button" variant="outline" size="sm" onClick={handleExtract} disabled={isPending}>
-          {isPending ? <Spinner className="mr-2" /> : <ListTodo className="mr-2 h-3.5 w-3.5" />}
-          {isPending ? "Extracting…" : data ? "Re-extract" : "Extract Action Items"}
-        </Button>
+        <PermissionGuard permission="file.read">
+          <Button type="button" variant="outline" size="sm" onClick={handleExtract} disabled={isPending}>
+            {isPending ? <Spinner className="mr-2" /> : <ListTodo className="mr-2 h-3.5 w-3.5" />}
+            {isPending ? "Extracting…" : data ? "Re-extract" : "Extract Action Items"}
+          </Button>
+        </PermissionGuard>
       </div>
 
       {!data && !isPending && !isError ? (

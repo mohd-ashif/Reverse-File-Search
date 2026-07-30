@@ -18,10 +18,11 @@ class SearchStreamService:
     def __init__(
         self,
         db: Session,
+        organization_id: int | None = None,
         search_service: SearchService | None = None,
         answer_stream_service: AnswerStreamService | None = None,
     ) -> None:
-        self.search_service = search_service or SearchService(db)
+        self.search_service = search_service or SearchService(db, organization_id=organization_id)
         self.answer_stream_service = answer_stream_service or AnswerStreamService()
 
     def stream(self, query: SearchQuery) -> Iterator[str]:

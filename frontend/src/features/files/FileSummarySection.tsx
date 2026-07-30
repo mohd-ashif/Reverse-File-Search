@@ -13,6 +13,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { useFileSummary, useGenerateFileSummary } from "@/hooks/useFiles";
 
 interface FileSummarySectionProps {
@@ -73,22 +74,24 @@ export function FileSummarySection({ fileId }: FileSummarySectionProps) {
           <Sparkles className="h-4 w-4 text-primary" />
           AI Summary
         </h3>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleGenerate}
-          disabled={generateSummary.isPending}
-        >
-          {generateSummary.isPending ? (
-            <Spinner className="mr-2" />
-          ) : summary ? (
-            <RotateCcw className="mr-2 h-3.5 w-3.5" />
-          ) : (
-            <Sparkles className="mr-2 h-3.5 w-3.5" />
-          )}
-          {generateSummary.isPending ? "Generating…" : summary ? "Regenerate" : "Generate Summary"}
-        </Button>
+        <PermissionGuard permission="file.summary">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleGenerate}
+            disabled={generateSummary.isPending}
+          >
+            {generateSummary.isPending ? (
+              <Spinner className="mr-2" />
+            ) : summary ? (
+              <RotateCcw className="mr-2 h-3.5 w-3.5" />
+            ) : (
+              <Sparkles className="mr-2 h-3.5 w-3.5" />
+            )}
+            {generateSummary.isPending ? "Generating…" : summary ? "Regenerate" : "Generate Summary"}
+          </Button>
+        </PermissionGuard>
       </div>
 
       {!summary && !generateSummary.isPending ? (

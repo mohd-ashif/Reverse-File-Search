@@ -18,5 +18,8 @@ class FileSummary(TimestampMixin, Base):
     risks: Mapped[list[str]] = mapped_column(JSON, default=list)
     action_items: Mapped[list[str]] = mapped_column(JSON, default=list)
     model: Mapped[str] = mapped_column(String(128), nullable=False)
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
 
     file: Mapped["IndexedFile"] = relationship(back_populates="summary")

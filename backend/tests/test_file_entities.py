@@ -6,13 +6,25 @@ from sqlalchemy.orm import Session
 
 from app.models.file import FileIndexStatus, FileType, IndexedFile
 from app.models.folder import MonitoredFolder
+from app.models.organization import Organization
 from app.services.entity_extraction_service import ENTITY_FIELDS, EntityExtractionService
 from app.services.groq_client import GroqClient
 from app.services.indexing_pipeline import IndexingPipeline
 
 
+def _get_or_create_org(db_session: Session) -> Organization:
+    """Reuses the `test_org` fixture's row (same slug) when `auth_client` is
+    also in play, since `organization_id` is a required FK on folders/files."""
+    org = db_session.query(Organization).filter(Organization.slug == "test-org").first()
+    if org is None:
+        org = Organization(name="Test Org", slug="test-org")
+        db_session.add(org)
+        db_session.flush()
+    return org
+
+
 def _create_file(db_session: Session, tmp_path, content: str = "hello world") -> IndexedFile:
-    folder = MonitoredFolder(path=str(tmp_path))
+    folder = MonitoredFolder(path=str(tmp_path), organization_id=_get_or_create_org(db_session).id)
     db_session.add(folder)
     db_session.flush()
 
@@ -21,6 +33,7 @@ def _create_file(db_session: Session, tmp_path, content: str = "hello world") ->
 
     file_record = IndexedFile(
         folder_id=folder.id,
+        organization_id=folder.organization_id,
         absolute_path=str(target),
         filename="sample.txt",
         extension=".txt",
@@ -156,25 +169,25 @@ def test_pipeline_skips_persisting_when_extraction_disabled(db_session: Session,
 # --- API ---
 
 
-def test_get_entities_404_when_file_missing(client: TestClient) -> None:
-    response = client.get("/api/v1/files/999999/entities")
+def test_get_entities_404_when_file_missing(auth_client: TestClient) -> None:
+    response = auth_client.get("/api/v1/files/999999/entities")
     assert response.status_code == 404
 
 
-def test_get_entities_404_before_extraction(client: TestClient, db_session: Session, tmp_path) -> None:
+def test_get_entities_404_before_extraction(auth_client: TestClient, db_session: Session, tmp_path) -> None:
     file_record = _create_file(db_session, tmp_path)
 
-    response = client.get(f"/api/v1/files/{file_record.id}/entities")
+    response = auth_client.get(f"/api/v1/files/{file_record.id}/entities")
     assert response.status_code == 404
 
 
-def test_get_entities_returns_stored_data(client: TestClient, db_session: Session, tmp_path) -> None:
+def test_get_entities_returns_stored_data(auth_client: TestClient, db_session: Session, tmp_path) -> None:
     file_record = _create_file(db_session, tmp_path)
     entity_service = EntityExtractionService(client=FakeGroqClient(response=FULL_RESPONSE))
     pipeline = IndexingPipeline(db_session, entity_extraction_service=entity_service)
     pipeline._extract_entities_safely(file_record, "Invoice text")
 
-    response = client.get(f"/api/v1/files/{file_record.id}/entities")
+    response = auth_client.get(f"/api/v1/files/{file_record.id}/entities")
 
     assert response.status_code == 200
     body = response.json()

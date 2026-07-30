@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { ScanProgressDialog } from "@/features/folders/ScanProgressDialog";
 import { foldersQueryKey, useDeleteFolder, useEstimateFolder, useStartFolderScan } from "@/hooks/useFolders";
 import type { Folder } from "@/types/folder";
@@ -91,49 +92,53 @@ export function FolderRowActions({ folder }: { folder: Folder }) {
         </Link>
       </Button>
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={handleScan}
-        disabled={startScan.isPending}
-        aria-label={`Scan ${folder.path}`}
-      >
-        {startScan.isPending ? <Spinner className="mr-2" /> : <ScanSearch className="mr-2 h-4 w-4" />}
-        Scan
-      </Button>
+      <PermissionGuard permission="folder.scan">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleScan}
+          disabled={startScan.isPending}
+          aria-label={`Scan ${folder.path}`}
+        >
+          {startScan.isPending ? <Spinner className="mr-2" /> : <ScanSearch className="mr-2 h-4 w-4" />}
+          Scan
+        </Button>
+      </PermissionGuard>
 
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-destructive hover:text-destructive"
-            disabled={deleteFolder.isPending}
-            aria-label={`Remove ${folder.path}`}
-          >
-            {deleteFolder.isPending ? <Spinner className="mr-2" /> : <Trash2 className="mr-2 h-4 w-4" />}
-            Remove
-          </Button>
-        </AlertDialogTrigger>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove this folder?</AlertDialogTitle>
-            <AlertDialogDescription>
-              <span className="font-mono text-xs">{folder.path}</span> will stop being monitored and its
-              indexed files will be removed from search. This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={handleDelete}
+      <PermissionGuard permission="folder.delete">
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              disabled={deleteFolder.isPending}
+              aria-label={`Remove ${folder.path}`}
             >
-              Remove folder
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              {deleteFolder.isPending ? <Spinner className="mr-2" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Remove
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove this folder?</AlertDialogTitle>
+              <AlertDialogDescription>
+                <span className="font-mono text-xs">{folder.path}</span> will stop being monitored and its
+                indexed files will be removed from search. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={handleDelete}
+              >
+                Remove folder
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </PermissionGuard>
 
       <AlertDialog open={sensitiveWarning !== null} onOpenChange={(open) => !open && setSensitiveWarning(null)}>
         <AlertDialogContent>
