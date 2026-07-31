@@ -16,9 +16,10 @@ cp backend/.env.example backend/.env
 ```
 
 Edit `backend/.env`:
-- Set a real `SECRET_KEY` before any non-local use (reserved for future auth; not yet enforced).
 - Set `DATABASE_URL` to point at your Postgres instance.
+- Generate a JWT keypair (`python backend/scripts/generate_jwt_keys.py`) before any non-local use — auth is fully enforced and fails fast at startup if the keys are missing.
 - Set `GROQ_API_KEY` if you want AI features enabled.
+- See [docs/DEPLOYMENT.md](DEPLOYMENT.md) for a full production deployment guide.
 
 ## 2. Backend Setup (local)
 
@@ -56,13 +57,15 @@ Frontend runs at `http://localhost:5173` and calls the backend at `VITE_API_BASE
 
 ## 4. Running with Docker
 
-From the project root:
-
 ```bash
+cp .env.example .env   # set POSTGRES_PASSWORD
+python backend/scripts/generate_jwt_keys.py   # if backend/keys/ doesn't exist yet
 docker compose up --build
 ```
 
-This brings up three services: `db` (Postgres 16), `backend` (port 8000), `frontend` (port 5173 → container port 80). Backend storage (`backend/storage/`, including the Chroma vector store and any extracted artifacts) is bind-mounted from `./backend/storage`, so it survives container rebuilds. The backend's `env_file` is `backend/.env` — make sure it exists before running (step 1).
+This brings up three services: `db` (Postgres 16), `backend` (port 8000), `frontend` (port 5173 → container port 80, proxying `/api/` to the backend). `docker-compose.override.yml` is auto-loaded and publishes those ports to localhost for local dev. Backend storage (`backend/storage/`) and the JWT keypair (`backend/keys/`) are bind-mounted, so both survive container rebuilds. The backend's `env_file` is `backend/.env` — make sure it exists before running (step 1). Database migrations run automatically on container start (`backend/docker-entrypoint.sh`); no manual `alembic upgrade head` step is needed for the Docker path.
+
+For production deployment (TLS, no exposed ports beyond 80/443, backups, CI/CD), see [`docs/DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ## 5. Database Migrations
 

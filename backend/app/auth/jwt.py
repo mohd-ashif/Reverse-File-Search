@@ -17,7 +17,12 @@ from app.core.config import settings
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
-def _read_key(path_setting: str, label: str) -> str:
+def _load_key(inline_value: str | None, path_setting: str, label: str) -> str:
+    if inline_value:
+        # Env vars sometimes arrive with literal "\n" instead of real newlines
+        # (e.g. pasted into a single-line dashboard field).
+        return inline_value.replace("\\n", "\n") if "\\n" in inline_value else inline_value
+
     path = Path(path_setting)
     if not path.is_absolute():
         path = _BACKEND_DIR / path
@@ -25,13 +30,14 @@ def _read_key(path_setting: str, label: str) -> str:
         return path.read_text(encoding="utf-8")
     except OSError as exc:
         raise RuntimeError(
-            f"Could not read {label} at '{path}'. "
-            "Run `python scripts/generate_jwt_keys.py` from the backend/ directory to generate it."
+            f"Could not read {label} at '{path}'. Either set the JWT_PRIVATE_KEY/JWT_PUBLIC_KEY "
+            "env vars to the PEM contents directly, or run "
+            "`python scripts/generate_jwt_keys.py` from the backend/ directory to generate the files."
         ) from exc
 
 
-_PRIVATE_KEY: str = _read_key(settings.JWT_PRIVATE_KEY_PATH, "JWT private key")
-_PUBLIC_KEY: str = _read_key(settings.JWT_PUBLIC_KEY_PATH, "JWT public key")
+_PRIVATE_KEY: str = _load_key(settings.JWT_PRIVATE_KEY, settings.JWT_PRIVATE_KEY_PATH, "JWT private key")
+_PUBLIC_KEY: str = _load_key(settings.JWT_PUBLIC_KEY, settings.JWT_PUBLIC_KEY_PATH, "JWT public key")
 
 
 class TokenError(Exception):

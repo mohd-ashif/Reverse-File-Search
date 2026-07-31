@@ -44,11 +44,14 @@ class Settings(BaseSettings):
     ESTIMATE_FILES_PER_SECOND: float = 50.0
     ESTIMATE_BYTES_PER_SECOND: float = 2_000_000.0
 
-    SECRET_KEY: str = "change-me-in-env"
-
     BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:5173"]
 
     # JWT
+    # Prefer PEM contents directly via JWT_PRIVATE_KEY / JWT_PUBLIC_KEY (e.g. Render env vars,
+    # where mounting a secret file at a specific path has proven unreliable). Falls back to
+    # reading from JWT_PRIVATE_KEY_PATH / JWT_PUBLIC_KEY_PATH on disk if those are unset.
+    JWT_PRIVATE_KEY: str | None = None
+    JWT_PUBLIC_KEY: str | None = None
     JWT_PRIVATE_KEY_PATH: str = "./keys/jwt_private.pem"
     JWT_PUBLIC_KEY_PATH: str = "./keys/jwt_public.pem"
     JWT_ALGORITHM: str = "RS256"

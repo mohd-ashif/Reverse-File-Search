@@ -1,0 +1,25 @@
+# Production override. Use explicitly, e.g.:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# This does NOT auto-load with plain `docker compose up` (unlike
+# docker-compose.override.yml), so it never accidentally applies to local dev.
+services:
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      frontend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in the root .env file}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

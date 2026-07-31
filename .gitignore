@@ -3,10 +3,22 @@ backend/venv/
 backend/__pycache__/
 backend/**/__pycache__/
 backend/*.db
-backend/storage/chroma/*
-!backend/storage/chroma/.gitkeep
 backend/.env
 backend/keys/
+
+# Only .gitkeep placeholders are tracked under storage/ - everything the app
+# writes at runtime (uploads, chroma index, sqlite db) stays untracked so a
+# fresh clone/deploy starts from an empty volume instead of shipping stale data.
+backend/storage/*
+!backend/storage/chroma/
+backend/storage/chroma/*
+!backend/storage/chroma/.gitkeep
+!backend/storage/uploads/
+backend/storage/uploads/*
+!backend/storage/uploads/.gitkeep
+!backend/storage/index/
+backend/storage/index/*
+!backend/storage/index/.gitkeep
 
 # Frontend
 frontend/node_modules/
@@ -14,6 +26,7 @@ frontend/dist/
 frontend/.env
 
 # General
+backups/
 .DS_Store
 *.log
 .vscode/

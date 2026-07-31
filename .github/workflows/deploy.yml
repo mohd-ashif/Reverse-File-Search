@@ -1,0 +1,32 @@
+name: Deploy
+
+# Manual only - deploying to the production host is a deliberate action, not
+# something that runs automatically on every push. Trigger from the Actions
+# tab ("Run workflow") when you're ready to ship what's on `main`.
+#
+# Requires these repository secrets (Settings -> Secrets and variables ->
+# Actions), pointing at the VM you provisioned yourself - see
+# docs/DEPLOYMENT.md:
+#   SSH_HOST        the VM's public IP or hostname
+#   SSH_USER        the SSH user to log in as
+#   SSH_PRIVATE_KEY private key matching a public key already on the VM
+#   DEPLOY_PATH     absolute path to the repo checkout on the VM
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd "${{ secrets.DEPLOY_PATH }}"
+            git pull --ff-only
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+            docker image prune -f
