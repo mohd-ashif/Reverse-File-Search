@@ -1,22 +1,93 @@
 # User Guide
 
-A complete walkthrough of everything Reverse File Search can do today. For setup, see [`INSTALLATION.md`](INSTALLATION.md). For the full requirements list, see [`SRS.md`](SRS.md). For internals, see [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`API_REFERENCE.md`](API_REFERENCE.md).
+A complete walkthrough of everything Reverse File Search can do today. For setup, see [`INSTALLATION.md`](INSTALLATION.md). For the full requirements list, see [`SRS.md`](SRS.md). For how data flows through the system, see [`DFD.md`](DFD.md). For internals, see [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`API_REFERENCE.md`](API_REFERENCE.md).
 
-The app has four pages, reachable from the top nav: **Overview**, **Folders**, **Files**, **Chat**.
+Once signed in, the app has these areas, reachable from the top nav: **Overview**, **Folders**, **Files**, **Chat**, **Profile**, **Security**, and **Organization** (Dashboard / Members / Invitations / Settings).
 
 ---
 
-## 1. Overview
+## 1. Getting started — account & sign-in
+
+### 1.1 Creating an account
+
+Go to **Register**, enter your email, a password, and (optionally) your full name. As soon as you register, the system creates a brand-new, **private workspace (organization)** just for you — nobody else can see your folders or files unless you later invite them into it. You're made the admin/owner of that workspace immediately.
+
+You'll then see a message asking you to check your email and verify your address before you can sign in.
+
+> **Note:** the very first person to ever register on a given deployment instead becomes that deployment's overall **Super Admin**, owning the platform's default workspace — this only applies to a brand-new install, not to your day-to-day signup.
+
+### 1.2 Verifying your email
+
+Click the verification link in the email (valid for 24 hours). If it expires or never arrives, use **Resend verification email** on the login page. You can't sign in until this step is done.
+
+### 1.3 Signing in
+
+Enter your email and password on **Login**. A few things happen behind the scenes:
+- If you get your password wrong 5 times in a row, your account **locks for 15 minutes** — even the correct password won't work until then. This is a wait, not something support needs to unlock.
+- On success, you'll get an email letting you know a new sign-in happened (with the approximate device/IP), so you notice if it wasn't you.
+- Your session stays active via a secure cookie; you generally won't need to log in again for a while — the app quietly refreshes your session in the background.
+
+### 1.4 Forgot your password?
+
+Click **Forgot password** on the login page and enter your email. If an account exists for that email, you'll get a reset link (valid for 1 hour). Resetting your password **signs you out everywhere** — every device/browser you were logged into will need to sign in again with the new password.
+
+### 1.5 Changing your password / profile
+
+The **Profile** page lets you update your display name and other profile details. The **Security** page lets you change your password (you'll need to enter your current one).
+
+### 1.6 Managing your sessions
+
+**Security → Sessions** lists every device/browser you're currently signed in on (by IP address and browser/device string, with when it started). If something looks unfamiliar, click **Revoke** on that session to sign it out immediately — useful if you signed in on a shared or borrowed device and forgot to log out.
+
+---
+
+## 2. Your workspace (organization)
+
+Every user belongs to exactly one **organization** at a time — this is the boundary that keeps your folders and files private to you (or your team, if you've invited people in). Folders you register and files you index always belong to your organization; nobody in a different organization can ever see them.
+
+### 2.1 Organization Dashboard
+
+**Organization → Dashboard** gives you an overview of your workspace.
+
+### 2.2 Organization Settings
+
+**Organization → Settings** lets an admin update the workspace's profile: name, logo, website, contact email/phone, country, timezone, and industry. Requires admin-level access.
+
+### 2.3 Inviting people
+
+**Organization → Members → Invite** lets an admin invite someone else by email and assign them a role (see §2.5 for what each role can do). The invitee gets an email with a one-time link; opening it either creates a new account for them (auto-verified — no email-verification step needed since the invite itself proves the email) or, if they already have an account with no workspace of their own, attaches them to yours. Either way, they land in your organization with the role you chose.
+
+You can see all pending invitations under **Organization → Invitations**, resend one if it expired or got lost, or revoke it before it's accepted.
+
+### 2.4 Managing members
+
+**Organization → Members** lists everyone in your workspace. An admin can change someone's role or remove them entirely — except the workspace's original owner (you, if you self-registered it), whose membership can't be changed or removed by anyone else.
+
+### 2.5 Roles — what each one can do
+
+| Role | Can do |
+|---|---|
+| **Organization Admin** | Everything below, plus manage members/invitations/roles and the organization's settings. Default role when you self-register your own workspace. |
+| **Manager** | Register/scan folders, browse/download files, view summaries/entities, search, and chat — but can't delete a folder. |
+| **Employee** | Browse/download files, view summaries/entities, search, and chat — but can't add, scan, or delete folders. |
+| **Viewer** | Browse folders/files and search only — can't download files, view summaries/entities, or use chat. |
+| **Super Admin** | Platform-level; only the very first user on a deployment. Full access everywhere, across every workspace. |
+
+If your role gets changed while you're signed in, it takes effect the next time you sign in again (or your session silently refreshes) — not instantly mid-session.
+
+---
+
+## 3. Overview
 
 A dashboard snapshot: how many folders are monitored, how many files are indexed, how many failed, and a breakdown by indexing status (pending / extracted / indexed / failed). First-time users see a **Getting Started** panel with next-step guidance until at least one folder is added. Quick links jump to Folders, Files, or Chat.
 
 ---
 
-## 2. Folders — register, preview, scan
+## 4. Folders — register, preview, scan
 
 ### Adding a folder
 
-Click **Add folder** and enter an absolute path. Before it's registered, you'll see a **preview**: estimated file count, how many are of a supported type, an approximate scan duration, estimated storage size, how many files are "large" (≥50MB by default), and — importantly — how many look like **sensitive files** (see below). Nothing is indexed at this step; adding a folder only registers the path.
+Click **Add folder** and enter an absolute path. Before it's registered, you'll see a **preview**: estimated file count, how many are of a supported type, an approximate scan duration, estimated storage size, how many files are "large" (≥50MB by default), and — importantly — how many look like **sensitive files** (see below). Nothing is indexed at this step; adding a folder only registers the path, scoped to your workspace.
 
 Paths are rejected up front with a specific reason if they're: missing, not a directory, permission-denied, locked by another process, an unreachable network location, or "too broad" (e.g. a drive root) — rather than a generic error.
 
@@ -40,19 +111,21 @@ Clicking **Scan** kicks off a background scan and opens a **live progress dialog
 
 A scan only re-processes what actually changed: unchanged files (same modification time) are skipped entirely; a file with a changed modification time but the same content checksum just has its timestamp updated (no re-extraction); files deleted from disk are removed from the index; only genuinely new or changed content is re-extracted and re-embedded.
 
+Adding, scanning, or removing a folder requires the right role (see §2.5) — a Viewer or Employee account won't see these controls enabled.
+
 ### Removing a folder
 
 **Remove** stops monitoring it and deletes all of its indexed files, chunks, and vector-store embeddings. This cannot be undone (the files on disk are untouched — only the index is removed).
 
 ### Chat with a folder
 
-Each folder row has a **Chat** button — see §4.2 below.
+Each folder row has a **Chat** button — see §6.2 below.
 
 ---
 
-## 3. Files — browse, filter, inspect
+## 5. Files — browse, filter, inspect, analyze
 
-The **Files** page lists every indexed file: filename, type, size, status (pending/extracted/indexed/failed), assigned tags, and when it was indexed. You can:
+The **Files** page lists every indexed file in your workspace: filename, type, size, status (pending/extracted/indexed/failed), assigned tags, and when it was indexed. You can:
 - **Search** by filename (debounced live filter).
 - **Filter** by folder and/or by category **tag**.
 - **Sort** by filename, size, status, or indexed date.
@@ -65,9 +138,10 @@ After a file finishes indexing, it's automatically classified into one or more s
 ### File detail view
 
 Clicking a row (or a citation badge in Chat) opens a detail dialog showing: status, type, size, path, checksum, folder, timestamps, tags, and any error message. From here you can:
-- **View File** — opens the original file in a new browser tab.
-- **Chat** — switches the dialog into a mini conversation scoped to just this file (see §4.3).
+- **View File** — opens the original file in a new browser tab (requires download permission).
+- **Chat** — switches the dialog into a mini conversation scoped to just this file (see §6.3).
 - View or **generate a summary** — see below.
+- Run **Compare**, **Contract Risk Analysis**, or **Action Items** — see §5.4 below.
 
 ### On-demand summaries
 
@@ -77,35 +151,45 @@ Each file's detail view offers a **structured summary**: an executive summary pa
 
 For invoice-like documents, the system also extracts structured fields in the background during indexing — invoice number, vendor, customer, GST/PAN numbers, amount, date, email, phone, address, bank, PO number, contract number — available via the API (`GET /files/{id}/entities`) for any integration that wants structured data rather than free text.
 
+### 5.4 Document analysis tools
+
+Three additional on-demand tools live alongside the summary in a file's detail view — each recomputed fresh every time you run it (nothing is cached), and each requires an AI provider to be configured:
+
+- **Compare files** — pick a second indexed file to compare against the one you have open. You get a plain-language summary of how the two differ, plus explicit lists of clauses added, clauses removed, and any financial changes (amounts, dates, terms) between them. Useful for comparing two versions of the same contract or invoice.
+- **Contract risk analysis** — runs the file against five fixed risk checks: **Missing Signature**, **Unlimited Liability**, **Auto-Renewal**, **Late Fees**, and **Termination Clause**. Each one comes back as either flagged (with a plain-language explanation of what was found) or clear — you always get all five, never a partial list.
+- **Action items** — pulls out a task list from meeting-notes-style documents: who's responsible, what the task is, any deadline mentioned, and a priority (High/Medium/Low). Anything without a clear task is left out rather than guessed at.
+
+If no AI provider is configured, or it's temporarily unreachable, each tool shows a clear error rather than a wrong or empty-looking result.
+
 ---
 
-## 4. Chat — talk to your files
+## 6. Chat — talk to your files
 
-The **Chat** page (nav label "Chat", route `/search`) is a full multi-turn conversation with an AI grounded only in your indexed files.
+The **Chat** page (nav label "Chat", route `/search`) is a full multi-turn conversation with an AI grounded only in your indexed files — never files belonging to another organization.
 
-### 4.1 Starting a conversation
+### 6.1 Starting a conversation
 
 With an empty conversation, you'll see a few clickable **suggested questions**. Otherwise, type and press **Enter** (Shift+Enter for a newline) or tap send.
 
-As you type in the search box, an **autocomplete dropdown** appears with up to three sections — **Recent searches** (your own past queries), **Popular searches** (the most frequent queries across all usage), and **AI-generated searches** (smart suggestions, e.g. "Show GST invoices", "Invoices over ₹50,000", "Contracts signed last month") — updating live as you keep typing.
+As you type in the search box, an **autocomplete dropdown** appears with up to three sections — **Recent searches** (your own past queries), **Popular searches** (the most frequent queries across your workspace), and **AI-generated searches** (smart suggestions, e.g. "Show GST invoices", "Invoices over ₹50,000", "Contracts signed last month") — updating live as you keep typing.
 
-### 4.2 Folder-scoped chat
+### 6.2 Folder-scoped chat
 
 From the **Folders** page, click **Chat** on any folder row. You land on the Chat page with a banner reading "Chatting within folder: `<path>`" and folder-flavored starter prompts ("What invoices are unpaid?", "What's the largest purchase?", "Who spent the most?"). Every answer in this conversation is grounded **only** in documents inside that folder — nothing else in your index is considered. Click **Exit folder chat** in the banner to return to the unscoped, all-files conversation. Switching between folders (or back to global) always starts a fresh conversation — history doesn't leak across scopes.
 
-### 4.3 File-scoped chat
+### 6.3 File-scoped chat
 
 Open any file's detail view and click **Chat**. This swaps the dialog into its own mini conversation, with prompts like "Summarize this file.", "Explain clause 4.", "Who signed?", "When was payment made?" — answered using **only that file's content**, in full (not a similarity-searched excerpt), so specific questions about a particular clause or detail aren't at the mercy of a search match missing it. Click **Details** to switch back to the file's metadata view; re-opening the dialog for a different file starts a new conversation.
 
-### 4.4 What you see in a response, in order
+### 6.4 What you see in a response, in order
 
 1. **Thinking…** — a typing indicator before the first word arrives.
 2. The answer **typing itself out** live, rendered as full Markdown (headings, lists, tables) with syntax-aware, copyable code blocks.
-3. A **"Searched for: …"** note if your query was rephrased for better retrieval (see §4.6) — omitted for file-scoped chat, since nothing is rewritten there.
+3. A **"Searched for: …"** note if your query was rephrased for better retrieval (see §6.6) — omitted for file-scoped chat, since nothing is rewritten there.
 4. **Sources** — clickable badges naming the file(s) the answer is based on; clicking one that matches an indexed file opens its detail view. These come directly from what was actually retrieved — never invented.
 5. **Confidence** — a percentage indicating how well your indexed content supports the answer.
 
-### 4.5 Per-message controls
+### 6.5 Per-message controls
 
 | Control | When | Effect |
 |---|---|---|
@@ -113,26 +197,29 @@ Open any file's detail view and click **Chat**. This swaps the dialog into its o
 | **Retry** | After done / cancelled / error | Regenerates that answer using the conversation up to that point |
 | **Copy** | As soon as any text exists | Copies the answer text to your clipboard |
 
-### 4.6 Smarter search (automatic query rewriting)
+### 6.6 Smarter search (automatic query rewriting)
 
 For unscoped and folder-scoped chat, your query is automatically rewritten before searching — helpful for short queries or acronyms that wouldn't match file content well as-is (e.g. `GST` → `GST invoices issued during financial year`). This never blocks search (falls back to your original text if unavailable) and never changes the wording of the final answer, only which files get found.
 
-### 4.7 Grounding & trust
+### 6.7 Grounding & trust
 
-The AI only ever sees the text of the files actually retrieved for your query — no general knowledge, nothing outside your indexed content. If there isn't enough information, the response is exactly:
+The AI only ever sees the text of the files actually retrieved for your query, from within your own workspace — no general knowledge, nothing outside your indexed content, nothing from anyone else's organization. If there isn't enough information, the response is exactly:
 
 > "I couldn't find enough information."
 
 with no sources — never a guess. Conversation history lives only in your browser tab; nothing conversational is saved anywhere. Reloading the page starts fresh.
 
-### 4.8 Theme
+### 6.8 Theme
 
 The sun/moon toggle in the header switches light/dark mode. Your choice is remembered; on your first visit it follows your OS preference.
 
 ---
 
-## 5. If something goes wrong
+## 7. If something goes wrong
 
-- **No API key configured / AI temporarily unreachable:** the affected message shows a distinct error (not the "couldn't find enough information" text), with a **Retry** option. Search itself (folder browsing, plain retrieval) keeps working regardless — only the AI-generated pieces (answers, rewriting, tags, entities, summaries, AI search suggestions) are affected.
+- **Can't log in — "account locked":** you've had 5 wrong password attempts in a row; wait 15 minutes, or use **Forgot password** to reset it immediately instead of waiting.
+- **Can't log in — "please verify your email":** check your inbox (and spam folder) for the verification link, or use **Resend verification email** on the login page.
+- **No API key configured / AI temporarily unreachable:** the affected message/tool shows a distinct error (not the "couldn't find enough information" text), with a **Retry** option where applicable. Search itself (folder browsing, plain retrieval) keeps working regardless — only the AI-generated pieces (answers, rewriting, tags, entities, summaries, AI search suggestions, comparison, contract risk, action items) are affected.
 - **Connection drops mid-answer:** the message shows an error alongside whatever partial text had already streamed in, plus Retry.
 - **A scan reports failed files:** check the failure list in the scan-complete summary for the specific error per file (e.g. unreadable/corrupt file, OCR unavailable for an image).
+- **A control (Add folder, Scan, Delete, Invite, etc.) is missing or disabled:** your role doesn't include that permission — see §2.5, or ask your workspace's Organization Admin.

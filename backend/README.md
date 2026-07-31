@@ -112,13 +112,27 @@ All settings are defined in `app/core/config.py` (`Settings`, loaded via `pydant
 | `TESSERACT_CMD` | *(blank)* | Absolute path to the Tesseract binary; blank uses `PATH` |
 | `SCAN_IGNORE_DIR_NAMES` | `__pycache__, node_modules, .git, .venv, venv, .idea, .vscode, System Volume Information, $RECYCLE.BIN, .Trash` | Directory names skipped during a folder scan |
 | `LARGE_FILE_THRESHOLD_BYTES` | `50_000_000` | Files at/above this size are flagged as "large" in scan estimates |
-| `SECRET_KEY` | `change-me-in-env` | Signing key for auth tokens (not yet wired up) |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `1440` | Auth token lifetime (not yet wired up) |
-| `BACKEND_CORS_ORIGINS` | `["http://localhost:5173"]` | Allowed CORS origins for the frontend |
+| `BACKEND_CORS_ORIGINS` | `["http://localhost:5173"]` | Allowed CORS origins for the frontend. Must be the real production origin(s) when deployed |
 | `GROQ_API_KEY` | *(blank)* | Groq Cloud API key. Leave blank to disable AI-generated answers entirely (search itself keeps working) |
 | `GROQ_API_BASE_URL` | `https://api.groq.com/openai/v1` | Groq's OpenAI-compatible API base URL |
 | `GROQ_MODEL` | `llama-3.3-70b-versatile` | Model used for both the JSON-mode and streaming answer paths |
 | `GROQ_TIMEOUT_SECONDS` | `20.0` | Request timeout for non-streaming Groq calls |
+| `JWT_PRIVATE_KEY_PATH` | `./keys/jwt_private.pem` | RS256 private key used to sign access/refresh tokens. Generate with `python backend/scripts/generate_jwt_keys.py` |
+| `JWT_PUBLIC_KEY_PATH` | `./keys/jwt_public.pem` | RS256 public key used to verify tokens |
+| `JWT_ALGORITHM` | `RS256` | JWT signing algorithm |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `15` | Access token lifetime |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | `7` | Refresh token lifetime |
+| `REFRESH_TOKEN_COOKIE_NAME` | `refresh_token` | Name of the httpOnly refresh-token cookie |
+| `REFRESH_TOKEN_COOKIE_PATH` | `/api/v1/auth` | Cookie path scope for the refresh token |
+| `SMTP_HOST` | `localhost` | SMTP server used to send verification/password-reset emails |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | *(blank)* | SMTP credentials |
+| `SMTP_FROM_EMAIL` / `SMTP_FROM_NAME` | `no-reply@example.com` / `Reverse File Search` | Sender identity for outgoing emails |
+| `SMTP_USE_TLS` | `true` | Use STARTTLS when sending |
+| `SMTP_VALIDATE_CERTS` | `true` | Validate the SMTP server's TLS certificate |
+| `FRONTEND_BASE_URL` | `http://localhost:5173` | Base URL used to build links inside verification/reset emails. Must be the real deployed frontend URL in production |
+| `MAX_FAILED_LOGIN_ATTEMPTS` | `5` | Failed logins before an account is locked |
+| `ACCOUNT_LOCKOUT_MINUTES` | `15` | Lockout duration after too many failed logins |
 
 ## API Reference
 

@@ -13,8 +13,9 @@ Rather than uploading files, users register local folders to monitor. The backen
 - On-demand structured document summaries.
 - Groq-backed query rewriting, AI-generated grounded answers (streaming + non-streaming), and search-box autocomplete (recent/popular/AI-generated suggestions).
 - Multi-turn AI chat, unscoped, folder-scoped, or single-file-scoped, with isolated conversation memory per scope and source citations.
+- JWT-based authentication (RS256, access + rotating refresh tokens), RBAC permission enforcement on every route, organization-scoped multi-tenant data isolation, account lockout, and audit logging.
 
-**Not yet implemented:** authentication/authorization enforcement; per-user data isolation.
+See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for production deployment.
 
 ## Documentation
 
@@ -24,6 +25,7 @@ Rather than uploading files, users register local folders to monitor. The backen
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System design, service map, data model, indexing/search pipelines |
 | [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) | Complete REST/SSE/WebSocket API reference |
 | [`docs/INSTALLATION.md`](docs/INSTALLATION.md) | Setup, local dev, Docker, migrations, tests |
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Production deployment on a free-tier VM (TLS, backups, CI/CD) |
 | [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) | End-to-end walkthrough of every feature |
 
 ## Tech Stack

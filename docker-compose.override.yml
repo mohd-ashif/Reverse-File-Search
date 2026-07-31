@@ -1,0 +1,16 @@
+# Auto-loaded by `docker compose up` when no -f flags are passed (local dev only).
+# Publishes ports to localhost for direct access during development.
+# Production deploys use `-f docker-compose.yml -f docker-compose.prod.yml`
+# explicitly, which skips this file.
+services:
+  db:
+    ports:
+      - "5432:5432"
+
+  backend:
+    ports:
+      - "8000:8000"
+
+  frontend:
+    ports:
+      - "5173:80"

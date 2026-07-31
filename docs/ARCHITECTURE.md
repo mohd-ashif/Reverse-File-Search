@@ -93,7 +93,7 @@ users               (reserved, not yet used by any endpoint)
 | `file_summaries` | `id`, `file_id` (FK, unique, cascade delete), `executive_summary`, `key_points` (JSON list), `important_dates`, `people`, `organizations`, `risks`, `action_items`, `model` | Generated on demand (`POST /files/{id}/summary`), not automatically at index time |
 | `file_tags` | `id`, `file_id` (FK, cascade delete), `tag` (unique per file+tag) | 0..N per file; regenerated wholesale (`replace_tags`) each time a file is (re-)indexed |
 | `search_query_logs` | `id`, `query_text` | Append-only; every `/search/` and `/search/stream` request logs its query text, used to derive recent/popular suggestions |
-| `users` | `id`, `email` (unique), `hashed_password`, `full_name`, `is_active` | Model exists; no auth flow uses it yet |
+| `users` | `id`, `email` (unique), `hashed_password`, `full_name`, `is_active`, plus org/role fields | Backs full JWT auth (RS256) with RBAC and org-scoped multi-tenancy - see `backend/app/auth/` |
 
 All tables inherit `id` (PK), `created_at`, `updated_at` from `TimestampMixin`.
 
@@ -191,13 +191,15 @@ State management is deliberately simple: TanStack Query for all server state (fo
 
 ## 9. Deployment
 
-- `docker-compose.yml` at the repo root runs three services: `db` (Postgres 16), `backend` (`docker/backend.Dockerfile`, port 8000), `frontend` (`docker/frontend.Dockerfile`, port 5173→80). Backend storage (`backend/storage/`, including the Chroma persist dir) is bind-mounted so it survives container recreation.
-- Locally, backend and frontend run independently (`uvicorn --reload`, `vite dev`), against a Postgres instance the developer provides.
+- `docker-compose.yml` at the repo root runs three services: `db` (Postgres 16), `backend` (`docker/backend.Dockerfile`), `frontend` (`docker/frontend.Dockerfile`, nginx serving the built SPA and reverse-proxying `/api/` to `backend:8000`). Backend storage (`backend/storage/`) and the JWT signing keypair (`backend/keys/`) are bind-mounted so both survive container recreation. The backend entrypoint (`backend/docker-entrypoint.sh`) waits for Postgres and runs `alembic upgrade head` before starting uvicorn.
+- `docker-compose.override.yml` (auto-loaded by plain `docker compose up`) publishes ports to localhost for local dev; it's intentionally not applied in production.
+- `docker-compose.prod.yml` adds a Caddy reverse proxy for automatic HTTPS and is applied explicitly: `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`.
+- Locally, backend and frontend can also run independently (`uvicorn --reload`, `vite dev`), against a Postgres instance the developer provides.
+- See [`docs/DEPLOYMENT.md`](DEPLOYMENT.md) for the full production runbook (VM setup, TLS, backups, CI/CD).
 
 ## 10. Known Caveats (as of this writing)
 
-- **No authentication** — `users` model and `SECRET_KEY`/`ACCESS_TOKEN_EXPIRE_MINUTES` config exist but nothing enforces auth; single-user/trusted-network deployment is assumed.
-- **`recent`/`popular` search suggestions are global**, not per-user — there's no session/user concept to partition them by.
+- **`recent`/`popular` search suggestions are global**, not per-user or per-org — every authenticated user shares the same suggestion pool.
 - **Folder-scoped chat requires re-indexing** files embedded before folder-scoping was added, since `folder_id` chunk metadata didn't exist yet at that point.
 - **Vector distance metric**: the Chroma collection is configured for cosine distance, but if the underlying HNSW index was physically built before that setting took effect (a pre-existing collection), the index itself keeps using whatever metric it was created with — reconfiguring the stored config doesn't retroactively rebuild the index. A full rebuild (wipe `storage/chroma`, rescan) is the only fix if this drifts.
 - **Conversation history is never persisted** — by design (see §6.4), not a bug: refreshing the chat page always starts a fresh conversation.
