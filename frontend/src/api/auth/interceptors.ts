@@ -41,6 +41,21 @@ function isAuthEndpoint(url: string | undefined): boolean {
 }
 
 /**
+ * Render's free tier occasionally drops the CORS preflight for `/auth/login`
+ * and `/auth/refresh` outright (cold start / single worker under load), which
+ * surfaces to axios as a response-less network error rather than a real
+ * status code. Retrying once after a short delay clears it without the user
+ * seeing an error for what is actually a transient infra hiccup.
+ */
+function isRetryableNetworkError(error: AxiosError): boolean {
+  return !error.response;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
  * Single-flight refresh of the access token via the httpOnly refresh cookie.
  *
  * This is the ONE shared refresh code path in the app: the axios response
@@ -96,7 +111,20 @@ export function attachInterceptors(instance: AxiosInstance): void {
   instance.interceptors.response.use(
     (response) => response,
     async (error: AxiosError) => {
-      const originalConfig = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
+      const originalConfig = error.config as
+        | (InternalAxiosRequestConfig & { _retry?: boolean; _networkRetry?: boolean })
+        | undefined;
+
+      if (
+        originalConfig &&
+        isAuthEndpoint(originalConfig.url) &&
+        isRetryableNetworkError(error) &&
+        !originalConfig._networkRetry
+      ) {
+        originalConfig._networkRetry = true;
+        await delay(1000);
+        return instance(originalConfig);
+      }
 
       if (error.response?.status !== 401 || !originalConfig || isAuthEndpoint(originalConfig.url)) {
         return Promise.reject(parseError(error));
