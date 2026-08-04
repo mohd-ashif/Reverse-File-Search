@@ -1,9 +1,17 @@
 import enum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Enum, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base_class import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.chunk import FileChunk
+    from app.models.document_entities import DocumentEntities
+    from app.models.folder import MonitoredFolder
+    from app.models.summary import FileSummary
+    from app.models.tag import FileTag
 
 
 class FileType(str, enum.Enum):

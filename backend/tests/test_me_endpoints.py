@@ -81,7 +81,7 @@ def test_list_sessions_only_shows_own_sessions(client: TestClient, db_session: S
     _create_verified_user(db_session, "sessions-user-a@example.com")
     _create_verified_user(db_session, "sessions-user-b@example.com")
 
-    login_a = _login_as(client, "sessions-user-a@example.com")
+    _login_as(client, "sessions-user-a@example.com")
 
     sessions_response = client.get("/api/v1/me/sessions")
     assert sessions_response.status_code == 200
@@ -140,7 +140,7 @@ def test_revoke_session_of_a_different_user_returns_404(client: TestClient, db_s
     _create_verified_user(db_session, "owner-user@example.com")
     _create_verified_user(db_session, "other-user@example.com")
 
-    owner_login = _login_as(client, "owner-user@example.com")
+    _login_as(client, "owner-user@example.com")
     owner_sessions = client.get("/api/v1/me/sessions").json()
     owner_session_id = owner_sessions[0]["id"]
 

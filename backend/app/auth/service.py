@@ -444,7 +444,7 @@ class AuthService:
 
     def refresh(self, refresh_token_raw: str, request: Request | None = None) -> AuthTokenData:
         try:
-            payload = decode_token(refresh_token_raw, expected_type="refresh")
+            decode_token(refresh_token_raw, expected_type="refresh")
         except TokenError as exc:
             raise InvalidTokenError("Invalid or expired refresh token.") from exc
 
