@@ -10,7 +10,6 @@ from app.schemas.scan import FolderEstimate
 from app.services.folder_access_guard import (
     FolderLockedError,
     FolderNetworkUnavailableError,
-    FolderPathInvalidError,
     FolderPathMissingError,
     FolderPermissionDeniedError,
     verify_folder_access,

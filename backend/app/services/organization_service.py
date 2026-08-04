@@ -175,7 +175,7 @@ class OrganizationService:
         return member
 
     def _revoke_role(self, user_id: int, role_name: str, organization_id: int | None) -> None:
-        from app.models.role import Role, UserRole
+        from app.models.role import UserRole
 
         role = self.role_repo.get_by_name(role_name)
         if role is None:
